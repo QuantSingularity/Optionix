@@ -4,7 +4,7 @@
 [![Test Coverage](https://img.shields.io/badge/coverage-81%25-brightgreen)](https://github.com/quantsingularity/Optionix/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-## 📈 Options Trading & Analytics Platform
+## Options Trading & Analytics Platform
 
 Optionix is a comprehensive options trading and analytics platform that combines traditional finance with blockchain technology. The platform provides advanced options pricing models, real-time market data, and AI-powered trading signals to help traders make informed decisions.
 
