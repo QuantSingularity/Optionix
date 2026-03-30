@@ -342,10 +342,10 @@ class FinancialCalculationService:
                     f"Position value {position_value} below minimum {settings.min_position_size}"
                 )
             if position_value > account_balance * Decimal("10"):
-                violations.append(f"Position value exceeds 10x account balance")
+                violations.append("Position value exceeds 10x account balance")
             required_margin = self.calculate_margin_requirement(position_value)
             if required_margin > account_balance:
-                violations.append(f"Insufficient balance for margin requirement")
+                violations.append("Insufficient balance for margin requirement")
             return {
                 "valid": len(violations) == 0,
                 "violations": violations,

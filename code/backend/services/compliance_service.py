@@ -383,7 +383,7 @@ class ComplianceService:
             )
             daily_volume = sum((trade.total_value for trade in daily_trades))
             if daily_volume + trade_value > self.daily_transaction_limit:
-                violations.append(f"Daily volume limit would be exceeded")
+                violations.append("Daily volume limit would be exceeded")
             if trade_value > Decimal("10000"):
                 warnings.append(
                     "Large transaction - additional reporting may be required"

@@ -611,7 +611,7 @@ class TestPerformance:
         db_session.add_all(users)
         db_session.commit()
         start_time = time.time()
-        result = db_session.query(User).filter(User.is_active == True).limit(50).all()
+        result = db_session.query(User).filter(User.is_active).limit(50).all()
         end_time = time.time()
         assert len(result) == 50
         assert end_time - start_time < 1.0

@@ -318,7 +318,7 @@ class TestAIModels:
     def test_model_prediction(self) -> Any:
         """Test model prediction"""
         model_id = "test_volatility_model"
-        data = pd.DataFrame(
+        pd.DataFrame(
             {
                 "open": [100],
                 "high": [102],

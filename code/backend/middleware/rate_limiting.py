@@ -26,7 +26,7 @@ class RateLimiter:
     def _initialize_redis(self) -> None:
         """Initialize rate limiter with Redis connection"""
         try:
-            temp_client = redis.from_url(
+            redis.from_url(
                 settings.redis_url,
                 password=settings.redis_password,
                 decode_responses=True,

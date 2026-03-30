@@ -580,7 +580,7 @@ class TestIntegration(unittest.TestCase):
             price = bs_model.black_scholes_price(params)
             self.assertGreater(price, 0)
             MonitoringService(self.config)
-            transaction_data = {
+            {
                 "transaction_id": "tx123",
                 "user_id": "user123",
                 "amount": price * 100,
@@ -605,13 +605,6 @@ class TestIntegration(unittest.TestCase):
                 kyc_result = compliance_service.verify_kyc(user_data)
                 self.assertTrue(kyc_result)
             MonitoringService(self.config)
-            transaction_data = {
-                "transaction_id": "tx123",
-                "user_id": "user123",
-                "amount": 25000,
-                "type": "WITHDRAWAL",
-                "status": "PENDING",
-            }
         except Exception as e:
             logger.info(f"Compliance test skipped due to: {e}")
 

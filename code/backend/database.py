@@ -49,7 +49,7 @@ def create_tables() -> None:
     global engine, SessionLocal
     try:
         # Test connection first
-        with engine.connect() as conn:
+        with engine.connect():
             pass
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created successfully")
