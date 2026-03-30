@@ -35,7 +35,7 @@ logger = structlog.get_logger(__name__)
 class AuditLogger:
     """Service for comprehensive audit logging"""
 
-    def __init__(self) -> Any:
+    def __init__(self) -> None:
         """Initialize audit logger"""
         self.executor = ThreadPoolExecutor(max_workers=2)
 

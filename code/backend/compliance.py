@@ -254,7 +254,7 @@ class RiskAssessment(Base):
 class ComplianceService:
     """Compliance service implementing comprehensive financial regulations"""
 
-    def __init__(self) -> Any:
+    def __init__(self) -> None:
         """Initialize compliance service"""
         self._sanctions_lists = {}
         self._monitoring_rules = {}

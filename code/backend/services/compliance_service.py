@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class ComplianceService:
     """Service for KYC/AML compliance and regulatory requirements"""
 
-    def __init__(self) -> Any:
+    def __init__(self) -> None:
         """Initialize compliance service"""
         self.suspicious_activity_threshold = Decimal("10000")
         self.daily_transaction_limit = Decimal("50000")

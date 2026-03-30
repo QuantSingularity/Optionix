@@ -47,7 +47,7 @@ class CircuitBreaker:
     movements and market disruption.
     """
 
-    def __init__(self, config: Any = None) -> Any:
+    def __init__(self, config: Any = None) -> None:
         """
         Initialize circuit breaker framework.
 
@@ -495,7 +495,7 @@ class MarketMonitor:
     System for monitoring market conditions.
     """
 
-    def __init__(self, config: Any = None) -> Any:
+    def __init__(self, config: Any = None) -> None:
         """
         Initialize market monitor.
 
@@ -704,7 +704,7 @@ class AlertSystem:
     System for generating alerts and notifications.
     """
 
-    def __init__(self) -> Any:
+    def __init__(self) -> None:
         """Initialize alert system."""
         self.alerts = []
         self.alert_handlers = []

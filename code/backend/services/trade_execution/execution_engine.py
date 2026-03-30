@@ -87,7 +87,7 @@ class Order:
         account_id: Any = None,
         algorithm: Any = ExecutionAlgorithm.MARKET,
         algorithm_params: Any = None,
-    ) -> Any:
+    ) -> None:
         """
         Initialize a new order.
 
@@ -265,7 +265,7 @@ class OrderManager:
     System for managing order lifecycle.
     """
 
-    def __init__(self) -> Any:
+    def __init__(self) -> None:
         """Initialize order manager."""
         self.orders = {}
         self.order_history = {}
@@ -484,7 +484,7 @@ class ExecutionEngine:
     Core engine for processing and executing trades.
     """
 
-    def __init__(self, config: Any = None) -> Any:
+    def __init__(self, config: Any = None) -> None:
         """
         Initialize execution engine.
 

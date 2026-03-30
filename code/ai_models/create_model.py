@@ -129,7 +129,7 @@ class ModelValidationResult:
 class VolatilityModel:
     """Volatility prediction model with financial robustness"""
 
-    def __init__(self, model_id: str = "volatility_v2") -> Any:
+    def __init__(self, model_id: str = "volatility_v2") -> None:
         self.model_id = model_id
         self.model = None
         self.scaler = None
@@ -315,7 +315,7 @@ class VolatilityModel:
 class FraudDetectionModel:
     """Fraud detection model for financial transactions"""
 
-    def __init__(self, model_id: str = "fraud_detection_v2") -> Any:
+    def __init__(self, model_id: str = "fraud_detection_v2") -> None:
         self.model_id = model_id
         self.model = None
         self.scaler = None
@@ -441,7 +441,7 @@ class FraudDetectionModel:
 class ModelService:
     """Model service for managing AI models"""
 
-    def __init__(self) -> Any:
+    def __init__(self) -> None:
         self.models = {}
         self.model_registry = {}
 

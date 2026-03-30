@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class RateLimiter:
     """Rate limiting service using Redis for distributed rate limiting"""
 
-    def __init__(self) -> Any:
+    def __init__(self) -> None:
         """Initialize rate limiter - gracefully handle Redis unavailability"""
         self.redis_client = None
         self._initialize_redis()

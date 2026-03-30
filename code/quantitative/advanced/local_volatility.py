@@ -335,7 +335,7 @@ class CEVModel:
     to depend on the asset price, capturing the leverage effect.
     """
 
-    def __init__(self, params: Any = None) -> Any:
+    def __init__(self, params: Any = None) -> None:
         """
         Initialize CEV model with parameters.
 

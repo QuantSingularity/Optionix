@@ -29,7 +29,7 @@ class ValidationResult:
         passed: bool,
         message: str,
         details: Dict[str, Any] = None,
-    ) -> Any:
+    ) -> None:
         self.category = category
         self.test_name = test_name
         self.passed = passed
@@ -41,7 +41,7 @@ class ValidationResult:
 class Validator:
     """validation for Optionix platform"""
 
-    def __init__(self, code_directory: str) -> Any:
+    def __init__(self, code_directory: str) -> None:
         self.code_directory = Path(code_directory)
         self.results: List[ValidationResult] = []
 

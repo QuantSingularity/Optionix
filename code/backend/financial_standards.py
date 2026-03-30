@@ -190,7 +190,7 @@ class RegulatoryReport(Base):
 class FinancialStandardsService:
     """Service for financial standards compliance"""
 
-    def __init__(self) -> Any:
+    def __init__(self) -> None:
         self.sox_controls = {
             "segregation_of_duties": True,
             "authorization_levels": {

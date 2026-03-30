@@ -49,7 +49,7 @@ class RiskEngine:
     performing scenario analysis, and stress testing portfolios.
     """
 
-    def __init__(self, config: Any = None) -> Any:
+    def __init__(self, config: Any = None) -> None:
         """
         Initialize risk engine.
 
@@ -318,7 +318,7 @@ class RiskMetricsCalculator:
     Calculator for various risk metrics.
     """
 
-    def __init__(self) -> Any:
+    def __init__(self) -> None:
         """Initialize risk metrics calculator."""
 
     def calculate_var(
@@ -828,7 +828,7 @@ class StressTestEngine:
     Core engine for stress testing.
     """
 
-    def __init__(self, config: Any = None) -> Any:
+    def __init__(self, config: Any = None) -> None:
         """
         Initialize stress test engine.
 
@@ -1056,7 +1056,7 @@ class StressScenarioGenerator:
     Generator for stress test scenarios.
     """
 
-    def __init__(self, config: Any = None) -> Any:
+    def __init__(self, config: Any = None) -> None:
         """
         Initialize stress scenario generator.
 
@@ -1235,7 +1235,7 @@ class PortfolioValuator:
     System for portfolio valuation under stress conditions.
     """
 
-    def __init__(self, config: Any = None) -> Any:
+    def __init__(self, config: Any = None) -> None:
         """
         Initialize portfolio valuator.
 
@@ -1327,7 +1327,7 @@ class ScenarioAnalyzer:
     Framework for scenario-based risk analysis.
     """
 
-    def __init__(self, config: Any = None) -> Any:
+    def __init__(self, config: Any = None) -> None:
         """
         Initialize scenario analyzer.
 
@@ -1538,7 +1538,7 @@ class SensitivityCalculator:
     Calculator for portfolio sensitivities.
     """
 
-    def __init__(self, config: Any = None) -> Any:
+    def __init__(self, config: Any = None) -> None:
         """
         Initialize sensitivity calculator.
 
@@ -1735,7 +1735,7 @@ class WhatIfAnalyzer:
     System for what-if analysis.
     """
 
-    def __init__(self, config: Any = None) -> Any:
+    def __init__(self, config: Any = None) -> None:
         """
         Initialize what-if analyzer.
 
