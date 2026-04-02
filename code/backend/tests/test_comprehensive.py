@@ -9,6 +9,7 @@ from decimal import Decimal
 
 import pytest
 from app import app
+from auth import AuthService
 from backend.database import Base, get_db
 from backend.models import User
 from backend.security import security_service
@@ -24,6 +25,9 @@ engine = create_engine(
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base.metadata.create_all(bind=engine)
+
+auth_service = AuthService()
+hashed = auth_service.get_password_hash("mypassword")
 
 
 def override_get_db() -> Any:
@@ -258,7 +262,7 @@ class TestCompliance:
         try:
             user = User(
                 email="compliance@test.com",
-                hashed_password=get_password_hash("password"),
+                hashed_password=hashed("password"),
                 full_name="Compliance User",
                 kyc_status="approved",
             )

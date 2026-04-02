@@ -262,7 +262,7 @@ class ModelService:
                     try:
                         proba = self.model.predict_proba(features)
                         confidence = float(np.max(proba))
-                    except:
+                    except Exception:
                         pass
             elif hasattr(self.model, "__call__"):
                 prediction = self.model(features)

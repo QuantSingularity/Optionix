@@ -321,7 +321,7 @@ class VolatilitySurface:
                             sabr_ivs.append(max(iv, 0.001))
                         sabr_ivs = np.array(sabr_ivs)
                         return np.sum((sabr_ivs - iv_slice) ** 2)
-                    except:
+                    except Exception:
                         return 1000000.0
 
                 result = minimize(
@@ -467,7 +467,7 @@ class VolatilitySurface:
                     x = np.log((np.sqrt(1 - 2 * rho * z + z**2) + z - rho) / (1 - rho))
                     iv = nu * np.log(F / K) / x
                 ivs[i] = max(iv * np.sqrt(T), 0.001)
-            except:
+            except Exception:
                 ivs[i] = 0.2
         return ivs
 

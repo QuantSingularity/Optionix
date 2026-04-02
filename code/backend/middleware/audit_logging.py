@@ -339,7 +339,7 @@ async def audit_middleware(request: Request, call_next):
             payload = verify_token(token)
             if payload:
                 user_id = payload.get("sub")
-    except:
+    except Exception:
         pass
     response = await call_next(request)
     processing_time = (datetime.utcnow() - start_time).total_seconds()

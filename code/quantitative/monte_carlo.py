@@ -15,6 +15,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
 from scipy import stats
 from scipy.stats.qmc import Sobol

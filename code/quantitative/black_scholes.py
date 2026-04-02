@@ -14,7 +14,7 @@ Implements comprehensive option pricing with:
 import logging
 import warnings
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, Optional
 
@@ -82,7 +82,7 @@ class OptionResult:
     time_value: float = 0.0
     moneyness: float = 0.0
     calculation_method: str = "black_scholes"
-    timestamp: datetime = None
+    timestamp: Optional[datetime] = None
 
 
 class BlackScholesModel:
@@ -239,7 +239,6 @@ class BlackScholesModel:
 
     def _phi(self, S, T, gamma, H, r, q, sigma):
         """Helper function for Bjerksund-Stensland model"""
-        (-r + q + gamma * 0.5 * sigma**2) / (sigma * np.sqrt(T))
         d1 = (np.log(S / H) + (r - q + (gamma + 0.5) * sigma**2) * T) / (
             sigma * np.sqrt(T)
         )
@@ -268,8 +267,6 @@ class BlackScholesModel:
             )
             B0 = K
             B_inf = K / (1 - 1 / beta)
-            2 * (r - q) / sigma**2
-            2 * r / sigma**2
             h1 = -(
                 (q * T)
                 + 2
@@ -290,7 +287,6 @@ class BlackScholesModel:
             if S >= S_star:
                 return S - K
 
-            S_star / beta
             a1 = self._phi(S_star, T, 1, K, r, q, sigma)
 
             return self.black_scholes_price(params) + a1 * (S / S_star) ** beta
@@ -304,8 +300,6 @@ class BlackScholesModel:
             )
             B0 = K
             B_inf = K / (1 - 1 / beta)
-            2 * (r - q) / sigma**2
-            2 * r / sigma**2
             h1 = -(
                 (q * T)
                 + 2
@@ -326,7 +320,6 @@ class BlackScholesModel:
             if S <= S_star:
                 return K - S
 
-            -S_star / beta
             a1 = self._phi(S_star, T, -1, K, r, q, sigma)
 
             return self.black_scholes_price(params) + a1 * (S / S_star) ** beta
@@ -384,7 +377,6 @@ class BlackScholesModel:
             doc_price = bs_price - (S / H) ** (2 * mu) * european_put_star
             return max(0.0, doc_price)
         else:
-            # Placeholder for other barrier types (e.g., in, up-and-out put, down-and-out call)
             logger.warning(
                 f"Unsupported barrier type: {barrier_type} {params.option_type}"
             )
@@ -401,16 +393,11 @@ class BlackScholesModel:
                 greeks = self.calculate_greeks(params)
             elif params.option_style == OptionStyle.AMERICAN:
                 price = self._bjerksund_stensland_price(params)
-                # Greeks for American options are complex, using European as approximation for now
                 greeks = self.calculate_greeks(params)
             elif params.option_style == OptionStyle.BARRIER:
                 price = self._barrier_option_price(params)
-                # Greeks for Barrier options are complex, using European as approximation for now
                 greeks = self.calculate_greeks(params)
             elif params.option_style in [OptionStyle.ASIAN, OptionStyle.LOOKBACK]:
-                # These require Monte Carlo or other specialized methods,
-                # which are implemented in monte_carlo.py.
-                # For Black-Scholes module, we return a warning and 0.0
                 logger.warning(
                     f"Option style {params.option_style} not supported in BlackScholesModel. Use MCSimulator."
                 )
@@ -446,7 +433,7 @@ class BlackScholesModel:
                 intrinsic_value=intrinsic_value,
                 time_value=time_value,
                 moneyness=moneyness,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
         except Exception as e:
             logger.error(f"Comprehensive option calculation failed: {e}")

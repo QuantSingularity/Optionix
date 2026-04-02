@@ -75,7 +75,7 @@ class TestSecurity(unittest.TestCase):
         }
         try:
             self.security_service = SecurityService(self.config)
-        except:
+        except Exception:
             self.security_service = Mock()
 
     def test_password_hashing(self) -> Any:
@@ -129,7 +129,7 @@ class TestCompliance(unittest.TestCase):
         }
         try:
             self.compliance_service = ComplianceService(self.config)
-        except:
+        except Exception:
             self.compliance_service = Mock()
 
     def test_kyc_verification(self) -> Any:
@@ -192,7 +192,7 @@ class TestDataHandler(unittest.TestCase):
         }
         try:
             self.data_handler = DataHandler(self.config)
-        except:
+        except Exception:
             self.data_handler = Mock()
 
     def test_user_data_validation(self) -> Any:
@@ -287,7 +287,7 @@ class TestBlackScholes(unittest.TestCase):
         """Set up test environment"""
         try:
             self.bs_model = BlackScholesModel()
-        except:
+        except Exception:
             self.bs_model = Mock()
 
     def test_option_pricing(self) -> Any:
@@ -305,7 +305,7 @@ class TestBlackScholes(unittest.TestCase):
                 price = self.bs_model.black_scholes_price(params)
                 self.assertGreater(price, 0)
                 self.assertLess(price, params.spot_price)
-            except:
+            except Exception:
                 with patch.object(
                     self.bs_model, "black_scholes_price", return_value=2.5
                 ):
@@ -330,7 +330,7 @@ class TestBlackScholes(unittest.TestCase):
                     self.assertIn(greek, greeks)
                 self.assertGreaterEqual(greeks["delta"], 0)
                 self.assertLessEqual(greeks["delta"], 1)
-            except:
+            except Exception:
                 mock_greeks = {
                     "delta": 0.5,
                     "gamma": 0.02,
@@ -360,7 +360,7 @@ class TestBlackScholes(unittest.TestCase):
                 iv = self.bs_model.implied_volatility(market_price, params)
                 self.assertGreater(iv, 0)
                 self.assertLess(iv, 2.0)
-            except:
+            except Exception:
                 with patch.object(
                     self.bs_model, "implied_volatility", return_value=0.25
                 ):
@@ -384,7 +384,7 @@ class TestMonteCarlo(unittest.TestCase):
                 process_type=ProcessType.GEOMETRIC_BROWNIAN_MOTION,
             )
             self.mc_simulator = MonteCarloSimulator(self.params)
-        except:
+        except Exception:
             self.mc_simulator = Mock()
 
     def test_path_generation(self) -> Any:
@@ -396,7 +396,7 @@ class TestMonteCarlo(unittest.TestCase):
                 self.assertEqual(paths.shape[1], self.params.num_simulations)
                 np.testing.assert_array_equal(paths[0], self.params.initial_price)
                 self.assertTrue(np.all(paths > 0))
-            except:
+            except Exception:
                 mock_paths = np.random.lognormal(0, 0.1, (253, 1000)) * 100
                 with patch.object(
                     self.mc_simulator, "generate_paths", return_value=mock_paths
@@ -408,7 +408,7 @@ class TestMonteCarlo(unittest.TestCase):
         """Test option pricing with Monte Carlo"""
         if hasattr(self.mc_simulator, "price_option"):
             try:
-                from monte_carlo import OptionPayoff
+                from quantitative.monte_carlo import OptionPayoff
 
                 payoff_spec = OptionPayoff(option_type="call", strike_price=105.0)
                 result = self.mc_simulator.price_option(
@@ -417,8 +417,8 @@ class TestMonteCarlo(unittest.TestCase):
                 self.assertGreater(result.option_price, 0)
                 self.assertGreater(result.standard_error, 0)
                 self.assertEqual(len(result.confidence_interval), 2)
-            except:
-                from monte_carlo import SimulationResult
+            except Exception:
+                from quantitative.monte_carlo import SimulationResult
 
                 mock_result = SimulationResult(
                     option_price=5.0,
@@ -444,7 +444,7 @@ class TestMonteCarlo(unittest.TestCase):
                 self.assertIn("cvar", var_result)
                 self.assertGreater(var_result["var"], 0)
                 self.assertGreater(var_result["cvar"], var_result["var"])
-            except:
+            except Exception:
                 mock_var = {
                     "var": 50000,
                     "cvar": 75000,
@@ -470,7 +470,7 @@ class TestMonitoring(unittest.TestCase):
         }
         try:
             self.monitoring_service = MonitoringService(self.config)
-        except:
+        except Exception:
             self.monitoring_service = Mock()
 
     @pytest.mark.asyncio
@@ -491,7 +491,7 @@ class TestMonitoring(unittest.TestCase):
                 if alert:
                     self.assertIsNotNone(alert.alert_id)
                     self.assertIn("user123", alert.user_id)
-            except:
+            except Exception:
                 from monitoring import AlertSeverity, ComplianceAlert
 
                 mock_alert = ComplianceAlert(
@@ -526,7 +526,7 @@ class TestMonitoring(unittest.TestCase):
                 self.assertIsNotNone(report.report_id)
                 self.assertEqual(report.report_type, "MIFID_II")
                 self.assertIn("total_transactions", report.data)
-            except:
+            except Exception:
                 from monitoring import RegulatoryReport
 
                 mock_report = RegulatoryReport(

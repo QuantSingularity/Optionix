@@ -150,7 +150,7 @@ class ComplianceService:
                 age = (datetime.now() - dob).days / 365.25
                 if age < 21 or age > 80:
                     score += 10
-            except:
+            except Exception:
                 pass
         doc_type = kyc_data.get("document_type", "")
         if doc_type == "drivers_license":

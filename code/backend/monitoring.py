@@ -439,6 +439,6 @@ class MonitoringService:
         }
 
 
-def create_monitoring_service(config: Dict[str, Any]) -> dMonitoringService:
+def create_monitoring_service(config: Dict[str, Any]) -> MonitoringService:
     """Create monitoring service instance"""
     return MonitoringService(config)
