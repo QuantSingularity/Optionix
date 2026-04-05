@@ -1,6 +1,12 @@
 ---
-# roles/database/handlers/main.yml
-- name: Restart MariaDB
+- name: restart mysql
   systemd:
-    name: mariadb
+    name: mysql
     state: restarted
+  become: yes
+
+- name: reload mysql
+  systemd:
+    name: mysql
+    state: reloaded
+  become: yes

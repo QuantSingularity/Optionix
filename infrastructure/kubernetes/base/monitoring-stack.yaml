@@ -1,3 +1,4 @@
+# ── Prometheus ─────────────────────────────────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -25,7 +26,7 @@ spec:
         fsGroup: 65534
       containers:
         - name: prometheus
-          image: prom/prometheus:latest
+          image: prom/prometheus:v2.51.0
           args:
             - --config.file=/etc/prometheus/prometheus.yml
             - --storage.tsdb.path=/prometheus/
@@ -33,7 +34,6 @@ spec:
             - --web.console.templates=/etc/prometheus/consoles
             - --storage.tsdb.retention.time=30d
             - --web.enable-lifecycle
-            - --web.enable-admin-api
             - --log.level=info
           ports:
             - containerPort: 9090
@@ -47,7 +47,7 @@ spec:
           resources:
             requests:
               memory: "512Mi"
-              cpu: "500m"
+              cpu: "250m"
             limits:
               memory: "1Gi"
               cpu: "1000m"
@@ -64,12 +64,14 @@ spec:
               port: 9090
             initialDelaySeconds: 30
             periodSeconds: 15
+            timeoutSeconds: 5
           readinessProbe:
             httpGet:
               path: /-/ready
               port: 9090
             initialDelaySeconds: 5
             periodSeconds: 5
+            timeoutSeconds: 3
       volumes:
         - name: config
           configMap:
@@ -81,6 +83,7 @@ spec:
           emptyDir: {}
 
 ---
+# ── Grafana ─────────────────────────────────────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -105,7 +108,7 @@ spec:
         fsGroup: 472
       containers:
         - name: grafana
-          image: grafana/grafana:latest
+          image: grafana/grafana:10.4.0
           env:
             - name: GF_SECURITY_ADMIN_PASSWORD
               valueFrom:
@@ -115,7 +118,7 @@ spec:
             - name: GF_SECURITY_ADMIN_USER
               value: admin
             - name: GF_INSTALL_PLUGINS
-              value: grafana-piechart-panel,grafana-worldmap-panel
+              value: grafana-piechart-panel
             - name: GF_SERVER_ROOT_URL
               value: https://monitoring.optionix.com
             - name: GF_SECURITY_COOKIE_SECURE
@@ -128,6 +131,10 @@ spec:
               value: "true"
             - name: GF_SECURITY_X_FRAME_OPTIONS
               value: deny
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "false"
           ports:
             - containerPort: 3000
               name: web
@@ -140,7 +147,7 @@ spec:
           resources:
             requests:
               memory: "256Mi"
-              cpu: "250m"
+              cpu: "100m"
             limits:
               memory: "512Mi"
               cpu: "500m"
@@ -157,12 +164,14 @@ spec:
               port: 3000
             initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 5
           readinessProbe:
             httpGet:
               path: /api/health
               port: 3000
             initialDelaySeconds: 5
             periodSeconds: 5
+            timeoutSeconds: 3
       volumes:
         - name: storage
           persistentVolumeClaim:
@@ -174,6 +183,7 @@ spec:
           emptyDir: {}
 
 ---
+# ── Node Exporter ───────────────────────────────────────────────────────────────
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -198,12 +208,12 @@ spec:
       hostPID: true
       containers:
         - name: node-exporter
-          image: prom/node-exporter:latest
+          image: prom/node-exporter:v1.7.0
           args:
             - --path.procfs=/host/proc
             - --path.sysfs=/host/sys
-            - --collector.filesystem.ignored-mount-points
-            - ^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)
+            - --path.rootfs=/rootfs
+            - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|rootfs/var/lib/docker|rootfs/var/lib/containerd)($$|/)
           ports:
             - containerPort: 9100
               name: metrics
@@ -245,15 +255,17 @@ spec:
           operator: Exists
 
 ---
+# ── Elasticsearch (single-node) ─────────────────────────────────────────────────
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: elasticsearch
   namespace: logging
   labels:
     app: elasticsearch
 spec:
-  replicas: 3
+  serviceName: elasticsearch
+  replicas: 1
   selector:
     matchLabels:
       app: elasticsearch
@@ -269,13 +281,14 @@ spec:
         fsGroup: 1000
       initContainers:
         - name: increase-vm-max-map
-          image: busybox:latest
+          image: busybox:1.36
           command: ["sysctl", "-w", "vm.max_map_count=262144"]
           securityContext:
             privileged: true
+            runAsUser: 0
       containers:
         - name: elasticsearch
-          image: docker.elastic.co/elasticsearch/elasticsearch:8.5.0
+          image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
           env:
             - name: discovery.type
               value: single-node
@@ -284,9 +297,9 @@ spec:
             - name: xpack.security.enabled
               value: "true"
             - name: xpack.security.http.ssl.enabled
-              value: "true"
+              value: "false"
             - name: xpack.security.transport.ssl.enabled
-              value: "true"
+              value: "false"
             - name: ELASTIC_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -299,44 +312,52 @@ spec:
               name: transport
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
           resources:
             requests:
               memory: "1Gi"
-              cpu: "500m"
+              cpu: "250m"
             limits:
               memory: "2Gi"
               cpu: "1000m"
           volumeMounts:
             - name: data
               mountPath: /usr/share/elasticsearch/data
-            - name: config
-              mountPath: /usr/share/elasticsearch/config
             - name: tmp
               mountPath: /tmp
           livenessProbe:
             httpGet:
               path: /_cluster/health
               port: 9200
-              scheme: HTTPS
+              scheme: HTTP
+              httpHeaders:
+                - name: Authorization
+                  value: "Basic ZWxhc3RpYzpDSEFOR0VfTUU="
             initialDelaySeconds: 60
             periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: /_cluster/health
+              path: /_cluster/health?wait_for_status=yellow&timeout=5s
               port: 9200
-              scheme: HTTPS
+              scheme: HTTP
+              httpHeaders:
+                - name: Authorization
+                  value: "Basic ZWxhc3RpYzpDSEFOR0VfTUU="
             initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 5
       volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: elasticsearch-data
-        - name: config
-          configMap:
-            name: elasticsearch-config
         - name: tmp
           emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 30Gi

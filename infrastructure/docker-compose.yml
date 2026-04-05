@@ -1,0 +1,240 @@
+# Optionix – Docker Compose (local development / staging)
+# Production deployments use Kubernetes (see /kubernetes)
+
+version: "3.9"
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # ── Backend API ─────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: optionix/backend:${IMAGE_TAG:-latest}
+    container_name: optionix-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "mysql://${DB_USER:-appuser}:${DB_PASSWORD}@db:3306/${DB_NAME:-optionix}"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+      JWT_SECRET: "${JWT_SECRET}"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY}"
+      ENVIRONMENT: "${ENVIRONMENT:-development}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      ENABLE_AUDIT_LOGGING: "${ENABLE_AUDIT_LOGGING:-true}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:3000}"
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend-logs:/app/logs
+    networks:
+      - optionix-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=100m,mode=1777
+    logging: *default-logging
+
+  # ── Frontend ────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        REACT_APP_API_URL: "${REACT_APP_API_URL:-http://localhost:8000}"
+        REACT_APP_ENV: "${ENVIRONMENT:-development}"
+    image: optionix/frontend:${IMAGE_TAG:-latest}
+    container_name: optionix-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    networks:
+      - optionix-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  # ── MySQL Database ──────────────────────────────────────────────────────────
+  db:
+    image: mysql:8.0
+    container_name: optionix-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "${DB_ROOT_PASSWORD}"
+      MYSQL_DATABASE: "${DB_NAME:-optionix}"
+      MYSQL_USER: "${DB_USER:-appuser}"
+      MYSQL_PASSWORD: "${DB_PASSWORD}"
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - db-data:/var/lib/mysql
+      - db-logs:/var/log/mysql
+      - ./docker/mysql/conf.d:/etc/mysql/conf.d:ro
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - optionix-net
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "root",
+          "-p${DB_ROOT_PASSWORD}",
+          "--silent",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  # ── Redis Cache ─────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: optionix-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass "${REDIS_PASSWORD}"
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --loglevel notice
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - optionix-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=10m
+    logging: *default-logging
+
+  # ── Prometheus ──────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: optionix-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+      - --log.level=info
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - optionix-net
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  # ── Grafana ─────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: optionix-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_PASSWORD}"
+      GF_SERVER_ROOT_URL: "${GRAFANA_URL:-http://localhost:3001}"
+      GF_SECURITY_COOKIE_SECURE: "false"
+      GF_SECURITY_STRICT_TRANSPORT_SECURITY: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    ports:
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - optionix-net
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  # ── MySQL Exporter ──────────────────────────────────────────────────────────
+  mysql-exporter:
+    image: prom/mysqld-exporter:v0.15.1
+    container_name: optionix-mysql-exporter
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATA_SOURCE_NAME: "root:${DB_ROOT_PASSWORD}@(db:3306)/"
+    ports:
+      - "127.0.0.1:9104:9104"
+    networks:
+      - optionix-net
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+networks:
+  optionix-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  db-data:
+    driver: local
+  db-logs:
+    driver: local
+  redis-data:
+    driver: local
+  backend-logs:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local

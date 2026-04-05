@@ -23,7 +23,7 @@ DB_PASSWORD_FILE="/etc/optionix/db_backup_password"
 
 # Logging function
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE" >&2
 }
 
 # Error handling
@@ -97,7 +97,7 @@ backup_database() {
 
     # Encrypt the compressed dump
     log "Encrypting database dump..."
-    gpg --cipher-algo AES256 \
+    gpg --cipher-algo AES256 --no-symkey-cache \
         --compress-algo 1 \
         --symmetric \
         --batch \
@@ -158,7 +158,7 @@ backup_application_data() {
 
     # Encrypt the archive
     log "Encrypting application data..."
-    gpg --cipher-algo AES256 \
+    gpg --cipher-algo AES256 --no-symkey-cache \
         --compress-algo 1 \
         --symmetric \
         --batch \
@@ -213,7 +213,7 @@ backup_configuration() {
 
     # Encrypt the archive
     log "Encrypting configuration data..."
-    gpg --cipher-algo AES256 \
+    gpg --cipher-algo AES256 --no-symkey-cache \
         --compress-algo 1 \
         --symmetric \
         --batch \
@@ -280,7 +280,7 @@ backup_kubernetes() {
 
     # Encrypt the archive
     log "Encrypting Kubernetes backup..."
-    gpg --cipher-algo AES256 \
+    gpg --cipher-algo AES256 --no-symkey-cache \
         --compress-algo 1 \
         --symmetric \
         --batch \
@@ -474,7 +474,7 @@ main() {
             run_backup
             ;;
         restore-db)
-            restore_database "$2"
+            [ -n "${2:-}" ] || { echo "Usage: $0 restore-db <backup_file>"; exit 1; }; restore_database "$2"
             ;;
         test)
             test_backup_integrity

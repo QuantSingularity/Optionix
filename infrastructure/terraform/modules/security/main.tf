@@ -5,9 +5,8 @@
 resource "aws_security_group" "web" {
   name_prefix = "${var.environment}-web-"
   vpc_id      = var.vpc_id
-  description = "Security group for web servers - Financial Grade"
+  description = "Security group for ALB/web servers - Financial Grade"
 
-  # HTTPS only
   ingress {
     description = "HTTPS"
     from_port   = 443
@@ -16,7 +15,6 @@ resource "aws_security_group" "web" {
     cidr_blocks = var.allowed_cidr_blocks
   }
 
-  # HTTP redirect to HTTPS
   ingress {
     description = "HTTP redirect"
     from_port   = 80
@@ -49,7 +47,7 @@ resource "aws_security_group" "app" {
   description = "Security group for application servers"
 
   ingress {
-    description     = "Application port from web servers"
+    description     = "Application port from ALB"
     from_port       = 8000
     to_port         = 8000
     protocol        = "tcp"
@@ -57,7 +55,7 @@ resource "aws_security_group" "app" {
   }
 
   ingress {
-    description     = "Health check port"
+    description     = "Health check port from ALB"
     from_port       = 8080
     to_port         = 8080
     protocol        = "tcp"
@@ -88,11 +86,19 @@ resource "aws_security_group" "database" {
   description = "Security group for database servers"
 
   ingress {
-    description     = "MySQL/Aurora"
+    description     = "MySQL from application servers"
     from_port       = 3306
     to_port         = 3306
     protocol        = "tcp"
     security_groups = [aws_security_group.app.id]
+  }
+
+  egress {
+    description = "No outbound (database isolation)"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = merge(var.tags, {
@@ -111,7 +117,7 @@ resource "aws_security_group" "redis" {
   description = "Security group for Redis cache"
 
   ingress {
-    description     = "Redis"
+    description     = "Redis from application servers"
     from_port       = 6379
     to_port         = 6379
     protocol        = "tcp"
@@ -140,13 +146,13 @@ resource "aws_wafv2_web_acl" "optionix_waf" {
     allow {}
   }
 
-  # Rate limiting rule
+  # Rate limiting rule — standalone rules use `action`, not `override_action`
   rule {
     name     = "RateLimitRule"
     priority = 1
 
-    override_action {
-      none {}
+    action {
+      block {}
     }
 
     statement {
@@ -167,13 +173,9 @@ resource "aws_wafv2_web_acl" "optionix_waf" {
       metric_name                = "RateLimitRule"
       sampled_requests_enabled   = true
     }
-
-    action {
-      block {}
-    }
   }
 
-  # AWS Managed Rules
+  # AWS Managed Rules — rule group references require `override_action`
   dynamic "rule" {
     for_each = var.waf_rules
     content {
@@ -249,6 +251,12 @@ resource "aws_wafv2_web_acl" "optionix_waf" {
   tags = merge(var.tags, {
     Name = "${var.environment}-optionix-waf"
   })
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "${var.environment}-optionix-waf"
+    sampled_requests_enabled   = true
+  }
 }
 
 # GuardDuty for threat detection
@@ -281,6 +289,12 @@ resource "aws_guardduty_detector" "optionix_guardduty" {
   })
 }
 
+# Random IDs for unique naming
+resource "random_id" "config_suffix" {
+  count       = var.enable_config ? 1 : 0
+  byte_length = 4
+}
+
 # Config for compliance monitoring
 resource "aws_config_configuration_recorder" "optionix_config" {
   count = var.enable_config ? 1 : 0
@@ -306,6 +320,15 @@ resource "aws_config_delivery_channel" "optionix_config" {
   snapshot_delivery_properties {
     delivery_frequency = "TwentyFour_Hours"
   }
+
+  depends_on = [aws_config_configuration_recorder_status.optionix_config]
+}
+
+resource "aws_config_configuration_recorder_status" "optionix_config" {
+  count      = var.enable_config ? 1 : 0
+  name       = aws_config_configuration_recorder.optionix_config[0].name
+  is_enabled = true
+  depends_on = [aws_config_delivery_channel.optionix_config]
 }
 
 resource "aws_s3_bucket" "config_bucket" {
@@ -354,45 +377,10 @@ resource "aws_s3_bucket_public_access_block" "config_bucket_pab" {
 }
 
 # CloudTrail for audit logging
-resource "aws_cloudtrail" "optionix_trail" {
-  count = var.enable_cloudtrail ? 1 : 0
-
-  name           = "${var.environment}-optionix-trail"
-  s3_bucket_name = aws_s3_bucket.cloudtrail_bucket[0].bucket
-  s3_key_prefix  = "cloudtrail"
-
-  include_global_service_events = true
-  is_multi_region_trail         = true
-  enable_logging                = true
-
-  kms_key_id = var.kms_key_id
-
-  event_selector {
-    read_write_type           = "All"
-    include_management_events = true
-
-    data_resource {
-      type   = "AWS::S3::Object"
-      values = ["arn:aws:s3:::*/*"]
-    }
-  }
-
-  insight_selector {
-    insight_type = "ApiCallRateInsight"
-  }
-
-  tags = merge(var.tags, {
-    Name = "${var.environment}-cloudtrail"
-    Type = "Audit"
-  })
-
-  depends_on = [aws_s3_bucket_policy.cloudtrail_bucket_policy]
-}
-
 resource "aws_s3_bucket" "cloudtrail_bucket" {
   count = var.enable_cloudtrail ? 1 : 0
 
-  bucket        = var.cloudtrail_s3_bucket_name
+  bucket        = var.cloudtrail_s3_bucket_name != "" ? var.cloudtrail_s3_bucket_name : "${var.environment}-optionix-cloudtrail-${data.aws_caller_identity.current.account_id}"
   force_destroy = var.environment == "dev" ? true : false
 
   tags = merge(var.tags, {
@@ -400,6 +388,8 @@ resource "aws_s3_bucket" "cloudtrail_bucket" {
     Type = "Audit"
   })
 }
+
+data "aws_caller_identity" "current" {}
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail_bucket_encryption" {
   count = var.enable_cloudtrail ? 1 : 0
@@ -458,7 +448,7 @@ resource "aws_s3_bucket_policy" "cloudtrail_bucket_policy" {
           Service = "cloudtrail.amazonaws.com"
         }
         Action   = "s3:PutObject"
-        Resource = "${aws_s3_bucket.cloudtrail_bucket[0].arn}/*"
+        Resource = "${aws_s3_bucket.cloudtrail_bucket[0].arn}/cloudtrail/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
         Condition = {
           StringEquals = {
             "s3:x-amz-acl" = "bucket-owner-full-control"
@@ -467,6 +457,43 @@ resource "aws_s3_bucket_policy" "cloudtrail_bucket_policy" {
       }
     ]
   })
+
+  depends_on = [aws_s3_bucket_public_access_block.cloudtrail_bucket_pab]
+}
+
+resource "aws_cloudtrail" "optionix_trail" {
+  count = var.enable_cloudtrail ? 1 : 0
+
+  name           = "${var.environment}-optionix-trail"
+  s3_bucket_name = aws_s3_bucket.cloudtrail_bucket[0].bucket
+  s3_key_prefix  = "cloudtrail"
+
+  include_global_service_events = true
+  is_multi_region_trail         = true
+  enable_logging                = true
+
+  kms_key_id = var.kms_key_id
+
+  event_selector {
+    read_write_type           = "All"
+    include_management_events = true
+
+    data_resource {
+      type   = "AWS::S3::Object"
+      values = ["arn:aws:s3:::*/*"]
+    }
+  }
+
+  insight_selector {
+    insight_type = "ApiCallRateInsight"
+  }
+
+  tags = merge(var.tags, {
+    Name = "${var.environment}-cloudtrail"
+    Type = "Audit"
+  })
+
+  depends_on = [aws_s3_bucket_policy.cloudtrail_bucket_policy]
 }
 
 # IAM Roles and Policies
@@ -515,7 +542,7 @@ resource "aws_iam_role_policy" "optionix_policy" {
           "kms:GenerateDataKey*",
           "kms:DescribeKey"
         ]
-        Resource = var.kms_key_id
+        Resource = var.kms_key_id != null ? var.kms_key_id : "*"
       },
       {
         Effect = "Allow"
@@ -606,10 +633,4 @@ resource "aws_secretsmanager_secret_version" "database_credentials" {
     username = var.db_username
     password = var.db_password
   })
-}
-
-# Random IDs for unique naming
-resource "random_id" "config_suffix" {
-  count       = var.enable_config ? 1 : 0
-  byte_length = 4
 }

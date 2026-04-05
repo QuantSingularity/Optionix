@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: optionix-backend
-  namespace: default
+  namespace: optionix
   labels:
     app: optionix-backend
     version: v1.0.0
@@ -22,7 +22,7 @@ spec:
     metadata:
       labels:
         app: optionix-backend
-        version: "{{ .Values.backend.version }}"
+        version: '{{ .Values.backend.version | default "v1.0.0" }}'
         tier: backend
         component: api
       annotations:
@@ -40,8 +40,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: optionix-backend
-          image: optionix/backend:latest
-          imagePullPolicy: IfNotPresent
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: "{{ .Values.backend.image.pullPolicy }}"
           ports:
             - containerPort: 8000
               name: http
@@ -86,7 +86,7 @@ spec:
                   name: optionix-config
                   key: REDIS_PORT
             - name: ENVIRONMENT
-              value: production
+              value: "{{ .Values.environment }}"
             - name: ENABLE_AUDIT_LOGGING
               value: "true"
             - name: RATE_LIMIT_ENABLED
@@ -114,7 +114,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: "{{ .Values.backend.containerPort }}"
+              port: 8000
               scheme: HTTP
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -123,12 +123,18 @@ spec:
           readinessProbe:
             httpGet:
               path: /ready
-              port: "{{ .Values.backend.containerPort }}"
+              port: 8000
               scheme: HTTP
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            failureThreshold: 30
+            periodSeconds: 10
           volumeMounts:
             - name: tmp-volume
               mountPath: /tmp
@@ -138,7 +144,7 @@ spec:
               mountPath: /app/config
               readOnly: true
         - name: log-shipper
-          image: fluent/fluent-bit:latest
+          image: fluent/fluent-bit:3.0
           resources:
             requests:
               memory: "64Mi"
@@ -170,7 +176,7 @@ spec:
             sizeLimit: 1Gi
         - name: config-volume
           configMap:
-            name: "{{ .Values.appName }}-config"
+            name: optionix-config
         - name: fluent-bit-config
           configMap:
             name: fluent-bit-config
@@ -195,5 +201,7 @@ spec:
                     - key: app
                       operator: In
                       values:
-                        - "{{ .Values.appName }}-backend"
+                        - optionix-backend
                 topologyKey: kubernetes.io/hostname
+      imagePullSecrets:
+        - name: "{{ .Values.imagePullSecrets }}"

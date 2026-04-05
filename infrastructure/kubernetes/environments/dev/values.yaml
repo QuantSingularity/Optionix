@@ -1,15 +1,13 @@
 appName: optionix
 environment: dev
-
-# Backend configuration
 backend:
   replicas: 2
   image:
     repository: registry.example.com/app/backend
     tag: latest
     pullPolicy: Always
-  containerPort: 3000
-  servicePort: 80
+  containerPort: 8000
+  servicePort: 8000
   resources:
     limits:
       cpu: 500m
@@ -20,8 +18,8 @@ backend:
   apiUrl: http://app-backend
   jwtSecret: dev-jwt-secret
   apiKey: dev-api-key
-
-# Frontend configuration
+  encryptionKey: CHANGE_ME_32_CHAR_KEY_HERE_XXXX
+  version: latest
 frontend:
   replicas: 2
   image:
@@ -40,8 +38,6 @@ frontend:
     requests:
       cpu: 100m
       memory: 128Mi
-
-# Database configuration
 database:
   replicas: 1
   image:
@@ -64,8 +60,9 @@ database:
     requests:
       cpu: 500m
       memory: 512Mi
-
-# Redis configuration
+  host: optionix-database
+  backupStorageClass: standard
+  backupStorage: 20Gi
 redis:
   replicas: 1
   image:
@@ -83,15 +80,20 @@ redis:
     requests:
       cpu: 100m
       memory: 256Mi
-
-# Ingress configuration
+  password: CHANGE_ME_REDIS_PASSWORD
+  maxmemory: 512m
 ingress:
   host: dev.optionix.example.com
   class: nginx
   sslRedirect: "true"
   certManager:
     issuer: letsencrypt-staging
-
-# General configuration
 logLevel: debug
 imagePullSecrets: regcred
+namespace: optionix
+monitoring:
+  grafana:
+    adminPassword: CHANGE_ME_GRAFANA_PASSWORD
+logging:
+  elasticsearch:
+    password: CHANGE_ME_ES_PASSWORD

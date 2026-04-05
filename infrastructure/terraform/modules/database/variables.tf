@@ -8,8 +8,8 @@ variable "vpc_id" {
   type        = string
 }
 
-variable "private_subnet_ids" {
-  description = "IDs of the private subnets"
+variable "subnet_ids" {
+  description = "IDs of the database subnets"
   type        = list(string)
 }
 
@@ -39,4 +39,22 @@ variable "db_password" {
 variable "security_group_ids" {
   description = "List of security group IDs"
   type        = list(string)
+}
+
+variable "kms_key_id" {
+  description = "KMS key ID for storage encryption"
+  type        = string
+  default     = null
+}
+
+variable "allocated_storage" {
+  description = "Allocated storage in GB"
+  type        = number
+  default     = 20
+}
+
+variable "max_allocated_storage" {
+  description = "Maximum allocated storage in GB for autoscaling"
+  type        = number
+  default     = 100
 }

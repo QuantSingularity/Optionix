@@ -12,6 +12,7 @@ variable "environment" {
 variable "app_name" {
   description = "Application name"
   type        = string
+  default     = "optionix"
 }
 
 variable "vpc_cidr" {
@@ -38,10 +39,16 @@ variable "private_subnet_cidrs" {
   default     = ["10.0.4.0/24", "10.0.5.0/24", "10.0.6.0/24"]
 }
 
+variable "database_subnet_cidrs" {
+  description = "CIDR blocks for isolated database subnets"
+  type        = list(string)
+  default     = ["10.0.7.0/24", "10.0.8.0/24", "10.0.9.0/24"]
+}
+
 variable "instance_type" {
   description = "EC2 instance type"
   type        = string
-  default     = "t3.micro"
+  default     = "t3.medium"
 }
 
 variable "key_name" {
@@ -68,9 +75,22 @@ variable "db_username" {
 }
 
 variable "db_password" {
-  description = "Database password"
+  description = "Database password (auto-generated if not provided; kept for override)"
   type        = string
   sensitive   = true
+  default     = null
+}
+
+variable "db_allocated_storage" {
+  description = "Initial allocated storage for RDS instance (GB)"
+  type        = number
+  default     = 20
+}
+
+variable "db_max_allocated_storage" {
+  description = "Maximum allocated storage for RDS autoscaling (GB)"
+  type        = number
+  default     = 100
 }
 
 variable "default_tags" {
@@ -101,28 +121,31 @@ variable "project_name" {
 variable "terraform_state_bucket" {
   description = "S3 bucket name for Terraform state"
   type        = string
+  default     = ""
 }
 
 variable "terraform_lock_table" {
   description = "DynamoDB table for Terraform state locking"
   type        = string
+  default     = ""
 }
 
 variable "terraform_state_kms_key" {
   description = "KMS key ARN for Terraform state encryption"
   type        = string
+  default     = ""
 }
 
 variable "allowed_cidr_blocks" {
   description = "Allowed CIDR blocks for security group rules"
   type        = list(string)
-  default     = ["10.0.0.0/8"]
+  default     = ["0.0.0.0/0"]
 }
 
 variable "eks_cluster_version" {
   description = "Kubernetes version for EKS cluster"
   type        = string
-  default     = "1.28"
+  default     = "1.29"
 }
 
 variable "node_group_desired_capacity" {
@@ -149,14 +172,42 @@ variable "node_group_instance_types" {
   default     = ["t3.medium"]
 }
 
-variable "db_allocated_storage" {
-  description = "Initial allocated storage for RDS instance (GB)"
-  type        = number
-  default     = 20
+variable "enable_waf" {
+  description = "Enable WAF v2"
+  type        = bool
+  default     = true
 }
 
-variable "db_max_allocated_storage" {
-  description = "Maximum allocated storage for RDS autoscaling (GB)"
-  type        = number
-  default     = 100
+variable "waf_rules" {
+  description = "List of AWS Managed WAF rule group names"
+  type        = list(string)
+  default = [
+    "AWSManagedRulesCommonRuleSet",
+    "AWSManagedRulesKnownBadInputsRuleSet",
+    "AWSManagedRulesSQLiRuleSet"
+  ]
+}
+
+variable "enable_guardduty" {
+  description = "Enable AWS GuardDuty"
+  type        = bool
+  default     = true
+}
+
+variable "enable_config" {
+  description = "Enable AWS Config"
+  type        = bool
+  default     = true
+}
+
+variable "enable_cloudtrail" {
+  description = "Enable AWS CloudTrail"
+  type        = bool
+  default     = true
+}
+
+variable "certificate_arn" {
+  description = "ACM certificate ARN for HTTPS on the ALB"
+  type        = string
+  default     = ""
 }

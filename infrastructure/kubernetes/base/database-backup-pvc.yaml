@@ -3,10 +3,12 @@ kind: PersistentVolumeClaim
 metadata:
   name: "{{ .Values.appName }}-database-backup-pvc"
   namespace: "{{ .Values.namespace }}"
+  labels:
+    app: "{{ .Values.appName }}-database"
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: "{{ .Values.database.backupStorageClass }}"
+  storageClassName: "{{ .Values.database.backupStorageClass | default .Values.database.storageClass }}"
   resources:
     requests:
-      storage: "{{ .Values.database.backupStorage }}"
+      storage: '{{ .Values.database.backupStorage | default "20Gi" }}'

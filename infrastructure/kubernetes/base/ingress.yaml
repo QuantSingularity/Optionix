@@ -2,17 +2,29 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: "{{ .Values.appName }}-ingress"
+  namespace: "{{ .Values.namespace }}"
   annotations:
     kubernetes.io/ingress.class: "{{ .Values.ingress.class }}"
     nginx.ingress.kubernetes.io/ssl-redirect: "{{ .Values.ingress.sslRedirect }}"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload";
     cert-manager.io/cluster-issuer: "{{ .Values.ingress.certManager.issuer }}"
 spec:
+  ingressClassName: "{{ .Values.ingress.class }}"
   tls:
     - hosts:
         - "{{ .Values.ingress.host }}"
       secretName: "{{ .Values.appName }}-tls"
   rules:
-    - host: { { .Values.ingress.host } }
+    - host: "{{ .Values.ingress.host }}"
       http:
         paths:
           - path: /api
@@ -21,11 +33,11 @@ spec:
               service:
                 name: "{{ .Values.appName }}-backend"
                 port:
-                  number: "{{ .Values.backend.servicePort }}"
+                  number: { { .Values.backend.servicePort } }
           - path: /
             pathType: Prefix
             backend:
               service:
                 name: "{{ .Values.appName }}-frontend"
                 port:
-                  number: "{{ .Values.frontend.servicePort }}"
+                  number: { { .Values.frontend.servicePort } }

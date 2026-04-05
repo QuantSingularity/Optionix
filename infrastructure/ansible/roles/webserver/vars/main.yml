@@ -1,7 +1,9 @@
 ---
 # roles/webserver/vars/main.yml
-app_name: "{{ app_name }}"
+app_name: "{{ app_name | default('optionix') }}"
 server_name: "{{ inventory_hostname }}"
-app_port: 3000
+app_port: 8000
 nginx_worker_processes: auto
 nginx_worker_connections: 1024
+nginx_keepalive_timeout: 65
+nginx_client_max_body_size: "10m"

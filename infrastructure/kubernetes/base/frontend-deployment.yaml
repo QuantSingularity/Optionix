@@ -8,6 +8,11 @@ metadata:
     tier: frontend
 spec:
   replicas: "{{ .Values.frontend.replicas }}"
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: "{{ .Values.appName }}-frontend"
@@ -17,6 +22,13 @@ spec:
         app: "{{ .Values.appName }}-frontend"
         tier: frontend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: "{{ .Values.appName }}-frontend"
           image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
@@ -31,6 +43,13 @@ spec:
             requests:
               cpu: "{{ .Values.frontend.resources.requests.cpu }}"
               memory: "{{ .Values.frontend.resources.requests.memory }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: REACT_APP_API_URL
               valueFrom:
@@ -45,11 +64,44 @@ spec:
               port: "{{ .Values.frontend.containerPort }}"
             initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /
               port: "{{ .Values.frontend.containerPort }}"
             initialDelaySeconds: 5
             periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /var/cache/nginx
+            - name: run
+              mountPath: /var/run
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 100Mi
+        - name: cache
+          emptyDir:
+            sizeLimit: 200Mi
+        - name: run
+          emptyDir:
+            sizeLimit: 10Mi
       imagePullSecrets:
         - name: "{{ .Values.imagePullSecrets }}"
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - "{{ .Values.appName }}-frontend"
+                topologyKey: kubernetes.io/hostname

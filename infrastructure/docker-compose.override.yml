@@ -1,0 +1,31 @@
+# docker-compose.override.yml — local development overrides
+# Automatically loaded by docker-compose; do NOT commit secrets here
+
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app:ro
+      - backend-logs:/app/logs
+    environment:
+      LOG_LEVEL: debug
+      ENVIRONMENT: development
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    environment:
+      REACT_APP_ENV: development
+
+  db:
+    ports:
+      - "127.0.0.1:3306:3306"
+
+  redis:
+    ports:
+      - "127.0.0.1:6379:6379"

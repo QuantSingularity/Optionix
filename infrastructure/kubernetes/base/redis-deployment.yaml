@@ -17,13 +17,44 @@ spec:
         app: "{{ .Values.appName }}-redis"
         tier: cache
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: "{{ .Values.appName }}-redis"
           image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
           imagePullPolicy: "{{ .Values.redis.image.pullPolicy }}"
+          command:
+            - redis-server
+            - --requirepass
+            - $(REDIS_PASSWORD)
+            - --appendonly
+            - "yes"
+            - --maxmemory
+            - '{{ .Values.redis.maxmemory | default "256mb" }}'
+            - --maxmemory-policy
+            - allkeys-lru
           ports:
-            - containerPort: "{{ .Values.redis.containerPort }}"
+            - containerPort: 6379
               name: redis
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Values.appName }}-secrets"
+                  key: redis-password
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 999
+            capabilities:
+              drop:
+                - ALL
           resources:
             limits:
               cpu: "{{ .Values.redis.resources.limits.cpu }}"
@@ -33,18 +64,33 @@ spec:
               memory: "{{ .Values.redis.resources.requests.memory }}"
           livenessProbe:
             exec:
-              command: ["redis-cli", "ping"]
+              command:
+                - /bin/sh
+                - -c
+                - redis-cli -a "${REDIS_PASSWORD}" ping | grep -q PONG
             initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           readinessProbe:
             exec:
-              command: ["redis-cli", "ping"]
+              command:
+                - /bin/sh
+                - -c
+                - redis-cli -a "${REDIS_PASSWORD}" ping | grep -q PONG
             initialDelaySeconds: 5
             periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           volumeMounts:
             - name: "{{ .Values.appName }}-redis-data"
               mountPath: /data
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: "{{ .Values.appName }}-redis-data"
           persistentVolumeClaim:
             claimName: "{{ .Values.appName }}-redis-pvc"
+        - name: tmp
+          emptyDir:
+            sizeLimit: 100Mi

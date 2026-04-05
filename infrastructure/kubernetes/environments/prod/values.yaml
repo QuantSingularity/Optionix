@@ -1,15 +1,13 @@
 appName: optionix
 environment: prod
-
-# Backend configuration
 backend:
   replicas: 5
   image:
     repository: registry.example.com/app/backend
     tag: production
     pullPolicy: Always
-  containerPort: 3000
-  servicePort: 80
+  containerPort: 8000
+  servicePort: 8000
   resources:
     limits:
       cpu: 2000m
@@ -20,8 +18,8 @@ backend:
   apiUrl: http://app-backend
   jwtSecret: prod-jwt-secret
   apiKey: prod-api-key
-
-# Frontend configuration
+  encryptionKey: CHANGE_ME_32_CHAR_KEY_HERE_XXXX
+  version: production
 frontend:
   replicas: 5
   image:
@@ -40,8 +38,6 @@ frontend:
     requests:
       cpu: 500m
       memory: 512Mi
-
-# Database configuration
 database:
   replicas: 3
   image:
@@ -64,8 +60,9 @@ database:
     requests:
       cpu: 2000m
       memory: 4Gi
-
-# Redis configuration
+  host: optionix-database
+  backupStorageClass: premium-rwo
+  backupStorage: 20Gi
 redis:
   replicas: 3
   image:
@@ -83,15 +80,20 @@ redis:
     requests:
       cpu: 500m
       memory: 1Gi
-
-# Ingress configuration
+  password: CHANGE_ME_REDIS_PASSWORD
+  maxmemory: 2g
 ingress:
   host: optionix.example.com
   class: nginx
   sslRedirect: "true"
   certManager:
     issuer: letsencrypt-prod
-
-# General configuration
 logLevel: warn
 imagePullSecrets: regcred
+namespace: optionix
+monitoring:
+  grafana:
+    adminPassword: CHANGE_ME_GRAFANA_PASSWORD
+logging:
+  elasticsearch:
+    password: CHANGE_ME_ES_PASSWORD

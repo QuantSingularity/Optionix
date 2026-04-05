@@ -16,7 +16,7 @@
       - chkrootkit
       - auditd
       - rsyslog
-      - ntp
+      - chrony
       - unattended-upgrades
       - logrotate
       - clamav
@@ -65,6 +65,7 @@
     regexp: "^PermitRootLogin"
     line: "PermitRootLogin no"
     state: present
+    validate: "sshd -t -f %s"
   become: yes
   notify: restart ssh
 
@@ -81,12 +82,14 @@
 - name: Initialize AIDE database
   command: aideinit
   become: yes
-  creates: /var/lib/aide/aide.db.new
+  args:
+    creates: /var/lib/aide/aide.db.new
 
 - name: Move AIDE database to production location
   command: mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db
   become: yes
-  creates: /var/lib/aide/aide.db
+  args:
+    creates: /var/lib/aide/aide.db
 
 - name: Configure audit daemon
   template:
@@ -138,6 +141,7 @@
   command: freshclam
   become: yes
   ignore_errors: yes
+  changed_when: false
 
 - name: Configure kernel parameters for security
   sysctl:
@@ -163,12 +167,15 @@
     - { name: "net.ipv4.tcp_syncookies", value: "1" }
     - { name: "kernel.dmesg_restrict", value: "1" }
     - { name: "kernel.kptr_restrict", value: "2" }
+    - { name: "net.ipv6.conf.all.disable_ipv6", value: "1" }
+    - { name: "fs.suid_dumpable", value: "0" }
+    - { name: "kernel.randomize_va_space", value: "2" }
 
 - name: Create security monitoring user
   user:
     name: secmon
     system: yes
-    shell: /bin/false
+    shell: /sbin/nologin
     home: /var/lib/secmon
     create_home: yes
   become: yes
@@ -178,19 +185,19 @@
     name: "AIDE file integrity check"
     minute: "0"
     hour: "2"
-    job: "/usr/bin/aide --check | mail -s 'AIDE Report' admin@optionix.com"
+    job: "/usr/bin/aide --check | mail -s 'AIDE Report' admin@optionix.com 2>&1 || true"
     user: root
   become: yes
 
-- name: Configure NTP for time synchronization
+- name: Configure chrony for time synchronization
   template:
-    src: ntp.conf.j2
-    dest: /etc/ntp.conf
+    src: chrony.conf.j2
+    dest: /etc/chrony/chrony.conf
     owner: root
     group: root
     mode: "0644"
   become: yes
-  notify: restart ntp
+  notify: restart chrony
 
 - name: Ensure critical services are enabled and started
   systemd:
@@ -202,5 +209,5 @@
     - fail2ban
     - auditd
     - rsyslog
-    - ntp
+    - chrony
     - clamav-daemon

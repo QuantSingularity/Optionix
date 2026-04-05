@@ -9,7 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/var/log/optionix/security_monitor.log"
 ALERT_EMAIL="security@optionix.com"
-METRICS_ENDPOINT="http://localhost:9090/metrics"
+METRICS_ENDPOINT="http://localhost:9091/metrics/job/security_monitor"
 ENVIRONMENT="${ENVIRONMENT:-production}"
 
 # Logging function
@@ -311,6 +311,9 @@ main() {
 
     log "Security monitoring cycle completed"
 }
+
+# Create log directory
+mkdir -p "$(dirname "$LOG_FILE")"
 
 # Run main function
 main "$@"

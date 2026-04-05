@@ -1,10 +1,17 @@
 ---
 # roles/database/vars/main.yml
-db_name: "{{ db_name }}"
-db_user: "{{ db_user }}"
-db_password: "{{ db_password }}"
-db_root_password: "{{ db_root_password }}"
-db_max_connections: 150
+# Override these via group_vars/vault.yml (encrypted with ansible-vault)
+optionix_db_name: "{{ db_name | default('optionix') }}"
+optionix_db_user: "{{ db_user | default('optionix_app') }}"
+optionix_db_password: "{{ db_password }}"
+mysql_root_password: "{{ db_root_password }}"
+backup_db_user: "{{ backup_user | default('backup_agent') }}"
+backup_db_password: "{{ backup_password }}"
+monitor_db_user: "{{ monitor_user | default('prom_exporter') }}"
+monitor_db_password: "{{ monitor_password }}"
+db_max_connections: 500
 db_max_allowed_packet: "64M"
 db_innodb_buffer_pool_size: "256M"
 db_innodb_log_file_size: "64M"
+mysql_allowed_hosts:
+  - "127.0.0.1"

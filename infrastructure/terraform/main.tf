@@ -2,7 +2,7 @@
 # Financial Grade Security and Compliance
 
 terraform {
-  required_version = ">= 1.0"
+  required_version = ">= 1.5"
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -14,29 +14,13 @@ terraform {
     }
   }
 
-  # Backend configuration should be provided via backend config file or CLI
-  # For local development, use local backend (comment out for remote):
-  # backend "local" {
-  #   path = "terraform.tfstate"
-  # }
-  
   # For production, use S3 backend (configure via backend.hcl):
   # terraform init -backend-config=backend.hcl
-  # 
-  # backend.hcl example:
-  # bucket         = "optionix-terraform-state-ACCOUNTID"
-  # key            = "optionix/terraform.tfstate"
-  # region         = "us-west-2"
-  # encrypt        = true
-  # dynamodb_table = "optionix-terraform-locks"
-  # kms_key_id     = "arn:aws:kms:REGION:ACCOUNT:key/KEY_ID"
 }
 
-# Configure AWS Provider with enhanced security
 provider "aws" {
   region = var.aws_region
 
-  # Security best practices
   skip_credentials_validation = false
   skip_metadata_api_check     = false
   skip_region_validation      = false
@@ -54,20 +38,19 @@ provider "aws" {
   }
 }
 
-# Data sources for existing resources
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 data "aws_availability_zones" "available" {
   state = "available"
 }
 
-# Random password generation for secrets
 resource "random_password" "db_password" {
-  length  = 32
-  special = true
-  upper   = true
-  lower   = true
-  numeric = true
+  length           = 32
+  special          = true
+  override_special = "!#$%&*()-_=+[]{}<>:?"
+  upper            = true
+  lower            = true
+  numeric          = true
 }
 
 resource "random_password" "redis_password" {
@@ -78,15 +61,13 @@ resource "random_password" "redis_password" {
   numeric = true
 }
 
-# Random ID for unique resource naming
 resource "random_id" "bucket_suffix" {
   byte_length = 4
 }
 
-# KMS Key for encryption
 resource "aws_kms_key" "optionix_key" {
   description             = "Optionix encryption key for ${var.environment}"
-  deletion_window_in_days = 7
+  deletion_window_in_days = 30
   enable_key_rotation     = true
 
   policy = jsonencode({
@@ -114,48 +95,68 @@ resource "aws_kms_alias" "optionix_key_alias" {
   target_key_id = aws_kms_key.optionix_key.key_id
 }
 
-# NOTE: The modules below require proper variable mappings
-# Uncomment and configure as per your actual module implementations
-
 # Network Module
 module "network" {
   source = "./modules/network"
 
-  environment = var.environment
-  vpc_cidr    = var.vpc_cidr
+  environment           = var.environment
+  vpc_cidr              = var.vpc_cidr
+  availability_zones    = var.availability_zones
+  public_subnet_cidrs   = var.public_subnet_cidrs
+  private_subnet_cidrs  = var.private_subnet_cidrs
+  database_subnet_cidrs = var.database_subnet_cidrs
 }
 
 # Security Module
 module "security" {
   source = "./modules/security"
 
-  environment = var.environment
-  vpc_id      = module.network.vpc_id
+  environment             = var.environment
+  vpc_id                  = module.network.vpc_id
+  app_name                = var.app_name
+  allowed_cidr_blocks     = var.allowed_cidr_blocks
+  kms_key_id              = aws_kms_key.optionix_key.arn
+  enable_waf              = var.enable_waf
+  waf_rules               = var.waf_rules
+  enable_guardduty        = var.enable_guardduty
+  enable_config           = var.enable_config
+  enable_cloudtrail       = var.enable_cloudtrail
+  cloudtrail_s3_bucket_name = "${var.app_name}-${var.environment}-cloudtrail-${random_id.bucket_suffix.hex}"
+  db_username             = var.db_username
+  db_password             = random_password.db_password.result
+  tags = {
+    Project = "Optionix"
+  }
 }
 
 # Compute Module
 module "compute" {
   source = "./modules/compute"
 
-  environment        = var.environment
-  vpc_id             = module.network.vpc_id
-  private_subnet_ids = module.network.private_subnet_ids
-  app_name           = var.app_name
-  security_group_ids = [module.security.compute_security_group_id]
+  environment            = var.environment
+  vpc_id                 = module.network.vpc_id
+  public_subnet_ids      = module.network.public_subnet_ids
+  private_subnet_ids     = module.network.private_subnet_ids
+  app_name               = var.app_name
+  security_group_ids     = [module.security.compute_security_group_id]
+  alb_security_group_ids = [module.security.web_security_group_id]
+  certificate_arn        = var.certificate_arn
 }
 
 # Database Module
 module "database" {
   source = "./modules/database"
 
-  environment = var.environment
-  vpc_id      = module.network.vpc_id
-  subnet_ids  = module.network.database_subnet_ids
-
-  # Database configuration
-  db_name  = var.db_name
-  username = var.db_username
-  password = random_password.db_password.result
+  environment           = var.environment
+  vpc_id                = module.network.vpc_id
+  subnet_ids            = module.network.database_subnet_ids
+  db_name               = var.db_name
+  db_username           = var.db_username
+  db_password           = random_password.db_password.result
+  security_group_ids    = [module.security.db_security_group_id]
+  kms_key_id            = aws_kms_key.optionix_key.arn
+  allocated_storage     = var.db_allocated_storage
+  max_allocated_storage = var.db_max_allocated_storage
 }
 
 # Storage Module
@@ -163,4 +164,5 @@ module "storage" {
   source = "./modules/storage"
 
   environment = var.environment
+  app_name    = var.app_name
 }

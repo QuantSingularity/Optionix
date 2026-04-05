@@ -41,8 +41,7 @@ spec:
       ports:
         - protocol: TCP
           port: 8000
-    - to: []
-      ports:
+    - ports:
         - protocol: TCP
           port: 53
         - protocol: UDP
@@ -91,8 +90,7 @@ spec:
       ports:
         - protocol: TCP
           port: 6379
-    - to: []
-      ports:
+    - ports:
         - protocol: TCP
           port: 53
         - protocol: UDP
@@ -127,8 +125,7 @@ spec:
         - protocol: TCP
           port: 3306
   egress:
-    - to: []
-      ports:
+    - ports:
         - protocol: TCP
           port: 53
         - protocol: UDP
@@ -156,8 +153,7 @@ spec:
         - protocol: TCP
           port: 6379
   egress:
-    - to: []
-      ports:
+    - ports:
         - protocol: TCP
           port: 53
         - protocol: UDP
@@ -194,8 +190,7 @@ spec:
           port: 8080
         - protocol: TCP
           port: 9100
-    - to: []
-      ports:
+    - ports:
         - protocol: TCP
           port: 53
         - protocol: UDP

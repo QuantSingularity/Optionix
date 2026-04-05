@@ -40,16 +40,15 @@ spec:
             - -c
             - |
               set -ex
-              # Generate mysql server-id from pod ordinal index
               [[ `hostname` =~ -([0-9]+)$ ]] || exit 1
               ordinal=${BASH_REMATCH[1]}
               echo [mysqld] > /mnt/conf.d/server-id.cnf
               echo server-id=$((100 + $ordinal)) >> /mnt/conf.d/server-id.cnf
-              # Copy appropriate conf.d files from config-map to emptyDir
               cp /mnt/config-map/my.cnf /mnt/conf.d/
-              # Copy SSL certificates
-              cp -r /mnt/ssl-certs/* /mnt/ssl/
-              chmod 600 /mnt/ssl/*
+              if [ -d /mnt/ssl-certs ] && [ "$(ls -A /mnt/ssl-certs)" ]; then
+                cp -r /mnt/ssl-certs/* /mnt/ssl/
+                chmod 600 /mnt/ssl/*
+              fi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -65,6 +64,7 @@ spec:
               mountPath: /mnt/config-map
             - name: ssl-certs
               mountPath: /mnt/ssl-certs
+              optional: true
             - name: ssl
               mountPath: /mnt/ssl
       containers:
@@ -87,10 +87,9 @@ spec:
                   key: mysql-password
           ports:
             - name: mysql
-              containerPort: "{{ .Values.database.containerPort }}"
+              containerPort: 3306
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: 999
             capabilities:
@@ -106,13 +105,9 @@ spec:
           livenessProbe:
             exec:
               command:
-                - mysqladmin
-                - ping
-                - -h
-                - localhost
-                - -u
-                - root
-                - -p$(MYSQL_ROOT_PASSWORD)
+                - /bin/bash
+                - -c
+                - mysqladmin ping -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" --silent
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -120,17 +115,21 @@ spec:
           readinessProbe:
             exec:
               command:
-                - mysql
-                - -h
-                - localhost
-                - -u
-                - root
-                - -p$(MYSQL_ROOT_PASSWORD)
-                - -e
-                - "SELECT 1"
-            initialDelaySeconds: 5
-            periodSeconds: 2
-            timeoutSeconds: 1
+                - /bin/bash
+                - -c
+                - mysql -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" -e "SELECT 1" --silent
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - mysqladmin ping -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" --silent
+            failureThreshold: 30
+            periodSeconds: 10
           volumeMounts:
             - name: data
               mountPath: /var/lib/mysql
@@ -142,10 +141,20 @@ spec:
             - name: tmp
               mountPath: /tmp
         - name: mysql-exporter
-          image: prom/mysqld-exporter:latest
+          image: prom/mysqld-exporter:v0.15.1
+          args:
+            - --collect.info_schema.tables
+            - --collect.info_schema.innodb_metrics
+            - --collect.global_status
+            - --collect.global_variables
           env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Values.appName }}-secrets"
+                  key: mysql-root-password
             - name: DATA_SOURCE_NAME
-              value: "{{ .Values.database.exporterDSN }}"
+              value: "root:$(MYSQL_ROOT_PASSWORD)@(localhost:3306)/"
           ports:
             - name: metrics
               containerPort: 9104
@@ -164,16 +173,30 @@ spec:
             limits:
               memory: "128Mi"
               cpu: "100m"
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 9104
+            initialDelaySeconds: 15
+            periodSeconds: 20
         - name: backup-agent
           image: "{{ .Values.database.image.repository }}:{{ .Values.database.image.tag }}"
           command:
             - /bin/bash
             - -c
             - |
+              set -euo pipefail
               while true; do
                 sleep 3600
-                mysqldump -h localhost -u root -p$(MYSQL_ROOT_PASSWORD) --all-databases --single-transaction --routines --triggers > /backup/backup-$(date +%Y%m%d-%H%M%S).sql
-                find /backup -name "backup-*.sql" -mtime +7 -delete
+                TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+                BACKUP_FILE="/backup/backup-${TIMESTAMP}.sql.gz"
+                mysqldump -h 127.0.0.1 -u root -p"${MYSQL_ROOT_PASSWORD}" \
+                  --all-databases --single-transaction \
+                  --routines --triggers --events \
+                  --hex-blob --set-gtid-purged=OFF \
+                  2>/dev/null | gzip > "${BACKUP_FILE}"
+                find /backup -name "backup-*.sql.gz" -mtime +7 -delete
+                echo "[$(date)] Backup completed: ${BACKUP_FILE}"
               done
           env:
             - name: MYSQL_ROOT_PASSWORD
@@ -183,7 +206,6 @@ spec:
                   key: mysql-root-password
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: 999
             capabilities:
@@ -199,6 +221,8 @@ spec:
           volumeMounts:
             - name: backup
               mountPath: /backup
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: conf
           emptyDir: {}
@@ -208,6 +232,7 @@ spec:
         - name: ssl-certs
           secret:
             secretName: "{{ .Values.appName }}-database-ssl-certs"
+            optional: true
         - name: ssl
           emptyDir: {}
         - name: tmp

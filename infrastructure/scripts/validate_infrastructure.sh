@@ -74,7 +74,7 @@ validate_ansible() {
 
     # Check playbook syntax
     test_start "Ansible Playbook Syntax"
-    local ansible_dir="/Optionix/infrastructure/ansible"
+    local ansible_dir="$(dirname "$SCRIPT_DIR")/ansible"
     if [ -d "$ansible_dir" ]; then
         local syntax_errors=0
         find "$ansible_dir" -name "*.yml" -o -name "*.yaml" | while read -r playbook; do
@@ -302,9 +302,9 @@ validate_security() {
     # Validate Ansible security templates
     test_start "Security Configuration Templates"
     local security_templates=(
-        "/Optionix/infrastructure/ansible/roles/common/templates/sshd_config.j2"
-        "/Optionix/infrastructure/ansible/roles/common/templates/jail.local.j2"
-        "/Optionix/infrastructure/ansible/roles/common/templates/audit.rules.j2"
+        "$(dirname "$SCRIPT_DIR")/ansible/roles/common/templates/sshd_config.j2"
+        "$(dirname "$SCRIPT_DIR")/ansible/roles/common/templates/jail.local.j2"
+        "$(dirname "$SCRIPT_DIR")/ansible/roles/common/templates/audit.rules.j2"
     )
 
     local missing_templates=0
@@ -351,7 +351,7 @@ validate_compliance() {
 
     # Check audit logging configuration
     test_start "Audit Logging Configuration"
-    local audit_config="/Optionix/infrastructure/ansible/roles/common/templates/audit.rules.j2"
+    local audit_config="$(dirname "$SCRIPT_DIR")/ansible/roles/common/templates/audit.rules.j2"
     if [ -f "$audit_config" ]; then
         # Check for required audit rules
         local required_rules=(
@@ -394,7 +394,7 @@ validate_compliance() {
     fi
 
     # Check database encryption
-    if grep -r "ssl\|tls\|encryption" /Optionix/infrastructure/ansible/roles/database/ >/dev/null 2>&1; then
+    if grep -r "ssl\|tls\|encryption" $(dirname "$SCRIPT_DIR")/ansible/roles/database/ >/dev/null 2>&1; then
         ((encryption_configs++))
     fi
 
@@ -462,7 +462,7 @@ validate_network_security() {
     local firewall_configs=0
 
     # Check Ansible firewall tasks
-    if grep -r "ufw\|firewall" /Optionix/infrastructure/ansible/ >/dev/null 2>&1; then
+    if grep -r "ufw\|firewall" $(dirname "$SCRIPT_DIR")/ansible/ >/dev/null 2>&1; then
         ((firewall_configs++))
     fi
 
@@ -482,12 +482,12 @@ validate_network_security() {
     local ssl_configs=0
 
     # Check Nginx SSL configuration
-    if grep -r "ssl\|tls" /Optionix/infrastructure/ansible/roles/webserver/ >/dev/null 2>&1; then
+    if grep -r "ssl\|tls" $(dirname "$SCRIPT_DIR")/ansible/roles/webserver/ >/dev/null 2>&1; then
         ((ssl_configs++))
     fi
 
     # Check database SSL
-    if grep -r "ssl\|tls" /Optionix/infrastructure/ansible/roles/database/ >/dev/null 2>&1; then
+    if grep -r "ssl\|tls" $(dirname "$SCRIPT_DIR")/ansible/roles/database/ >/dev/null 2>&1; then
         ((ssl_configs++))
     fi
 
@@ -584,6 +584,9 @@ main() {
         exit 1
     fi
 }
+
+# Create log directory
+mkdir -p "$(dirname "$LOG_FILE")"
 
 # Run main function
 main "$@"
