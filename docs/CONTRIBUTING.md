@@ -232,14 +232,14 @@ export const OptionPriceCalculator: React.FC<OptionPriceProps> = ({
  * @return optionId The ID of the newly created option
  */
 function createOption(
-    OptionType optionType,
-    uint256 strikePrice,
-    uint256 expirationTime
+  OptionType optionType,
+  uint256 strikePrice,
+  uint256 expirationTime
 ) external returns (uint256 optionId) {
-    require(strikePrice > 0, 'Invalid strike price');
-    require(expirationTime > block.timestamp, 'Invalid expiration');
+  require(strikePrice > 0, "Invalid strike price");
+  require(expirationTime > block.timestamp, "Invalid expiration");
 
-    // Implementation
+  // Implementation
 }
 ```
 
