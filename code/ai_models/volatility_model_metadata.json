@@ -1,17 +1,9 @@
 {
-  "version": "1.0.0-mock",
-  "created_at": "2025-11-30T12:00:00Z",
-  "features": [
-    "open",
-    "high",
-    "low",
-    "volume",
-    "price_range",
-    "price_change",
-    "volume_in_millions",
-    "mid_price"
-  ],
+  "model_type": "GradientBoostingRegressor",
+  "version": "1.0.0",
+  "created_at": "2026-04-20T15:37:40.813044+00:00",
+  "features": ["open", "high", "low", "volume"],
   "target": "volatility",
-  "model_type": "LinearRegression",
-  "description": "Mock volatility prediction model for initial setup."
+  "training_samples": 5000,
+  "description": "Volatility prediction model trained on synthetic OHLCV data. Replace with real market data for production use."
 }

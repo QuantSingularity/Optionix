@@ -1,0 +1,4 @@
+# Git LFS tracking for large binary assets
+docs/images/*.bmp filter=lfs diff=lfs merge=lfs -text
+docs/images/*.png filter=lfs diff=lfs merge=lfs -text
+infrastructure/**/*.zip filter=lfs diff=lfs merge=lfs -text

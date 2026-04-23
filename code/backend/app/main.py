@@ -65,7 +65,11 @@ app = FastAPI(
 )
 
 # ── Middleware (order matters: last added = outermost) ──────────────────────
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
+# TrustedHostMiddleware must not run during testing — TestClient sends host
+# "testserver" which would be rejected with 400 Invalid host header.
+# Only enforce in staging/production where real hostnames are known.
+if settings.environment in ("staging", "production"):
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,

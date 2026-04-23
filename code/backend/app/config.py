@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     api_key_prefix: str = "ok_"
     api_rate_limit_per_hour: int = 10000
 
+    allowed_hosts: List[str] = [
+        "localhost",
+        "127.0.0.1",
+        "optionix.com",
+        "*.optionix.com",
+    ]
     cors_origins: List[str] = ["http://localhost:3000", "https://optionix.com"]
     cors_allow_credentials: bool = True
     cors_allow_methods: List[str] = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
@@ -198,3 +204,5 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# (patched below by sed)

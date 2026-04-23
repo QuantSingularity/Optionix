@@ -8,8 +8,11 @@ import sys
 # Ensure the project root is on sys.path so 'app' package is importable
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Set test environment variables BEFORE importing app modules
+# Set test environment variables BEFORE importing app modules.
+# TESTING=true ensures settings.testing is True, which skips middlewares
+# (like TrustedHostMiddleware) that would reject the TestClient host "testserver".
 os.environ["ENVIRONMENT"] = "testing"
+os.environ["TESTING"] = "true"
 os.environ["SECRET_KEY"] = "test-secret-key-that-is-at-least-32-chars-long"
 os.environ["ENCRYPTION_KEY"] = "TestEncryptionKey1234567890!!!!!"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"

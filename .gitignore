@@ -451,3 +451,19 @@ allure-report/
 *.tap
 *.junit.xml
 *.xunit.xml
+
+# ── Binary model artifacts (regenerate via code/ai_models/generate_model_artifacts.py) ──
+*.h5
+*.pkl
+*.mlmodel
+saved_models/
+model_weights/
+
+# ── Large binary assets (use Git LFS or external storage) ──
+*.bmp
+*.psd
+docs/images/*.bmp
+
+# ── IDE / OS ──
+.DS_Store
+Thumbs.db
