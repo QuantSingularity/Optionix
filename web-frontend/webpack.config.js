@@ -1,13 +1,20 @@
+const path = require("path");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
-const path = require("node:path");
 
 module.exports = {
   entry: "./src/index.js",
+
   output: {
     path: path.resolve(__dirname, "dist"),
     filename: "bundle.js",
     publicPath: "/",
+    clean: true,
   },
+
+  resolve: {
+    extensions: [".js", ".jsx"],
+  },
+
   module: {
     rules: [
       {
@@ -25,22 +32,35 @@ module.exports = {
         use: ["style-loader", "css-loader"],
       },
       {
-        test: /\.(png|svg|jpg|jpeg|gif)$/i,
+        test: /\.(png|jpg|gif|svg|ico)$/,
+        type: "asset/resource",
+      },
+      {
+        test: /\.(woff|woff2|eot|ttf|otf)$/,
         type: "asset/resource",
       },
     ],
   },
-  resolve: {
-    extensions: [".js", ".jsx"],
-  },
+
   plugins: [
     new HtmlWebpackPlugin({
       template: "./public/index.html",
+      filename: "index.html",
+      inject: "body",
+      favicon: "./public/favicon.ico",
     }),
   ],
+
   devServer: {
-    historyApiFallback: true,
-    hot: true,
+    static: {
+      directory: path.join(__dirname, "public"),
+    },
     port: 3000,
+    hot: true,
+    open: true,
+    historyApiFallback: true, // Required for React Router BrowserRouter
+    compress: true,
   },
+
+  devtool: "source-map",
 };

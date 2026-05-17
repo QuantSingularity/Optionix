@@ -64,11 +64,12 @@ const MainContent = styled.main`
 const ContentArea = styled.div`
   flex: 1;
   padding: 20px;
+  padding-top: 90px;
   margin-left: ${(props) => (props.hasSidebar ? "240px" : "0")};
 
   @media (max-width: ${(props) => props.theme.breakpoints.tablet}) {
     margin-left: 0;
-    padding-top: 70px;
+    padding-top: 90px;
   }
 `;
 

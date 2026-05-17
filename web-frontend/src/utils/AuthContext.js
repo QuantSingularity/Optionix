@@ -5,33 +5,40 @@ import {
   useEffect,
   useState,
 } from "react";
-import api from "./api";
 
 const AuthContext = createContext();
+
+// ---------------------------------------------------------------------------
+// Demo credentials – allows the app to work without a running backend.
+// Replace or remove once the real API is connected.
+// ---------------------------------------------------------------------------
+const DEMO_USER = {
+  id: 1,
+  email: "demo@optionix.com",
+  full_name: "Demo Trader",
+  role: "trader",
+};
+const DEMO_CREDENTIALS = { email: "demo@optionix.com", password: "demo123" };
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Check if user is already logged in on mount
+  // Check for an existing session on mount
   useEffect(() => {
-    const checkAuth = async () => {
-      const token = localStorage.getItem("auth_token");
-      if (token) {
-        try {
-          // Verify token is still valid by making a test request
-          const response = await api.get("/auth/me");
-          setUser(response.data);
-        } catch (_err) {
-          // Token is invalid, clear it
-          localStorage.removeItem("auth_token");
-          setUser(null);
+    const checkAuth = () => {
+      try {
+        const stored = localStorage.getItem("optionix_user");
+        if (stored) {
+          setUser(JSON.parse(stored));
         }
+      } catch (_err) {
+        localStorage.removeItem("optionix_user");
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
-
     checkAuth();
   }, []);
 
@@ -40,31 +47,52 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       setError(null);
 
-      // Create FormData for login
-      const formData = new FormData();
-      formData.append("username", email);
-      formData.append("password", password);
+      // ------------------------------------------------------------------
+      // Demo mode: accept hardcoded credentials without a backend call.
+      // Swap this block for a real API call when the backend is ready:
+      //
+      //   const formData = new FormData();
+      //   formData.append("username", email);
+      //   formData.append("password", password);
+      //   const response = await api.post("/auth/login", formData, {
+      //     headers: { "Content-Type": "multipart/form-data" },
+      //   });
+      //   const { access_token, user: userData } = response.data;
+      //   localStorage.setItem("auth_token", access_token);
+      //   setUser(userData);
+      // ------------------------------------------------------------------
+      if (
+        email === DEMO_CREDENTIALS.email &&
+        password === DEMO_CREDENTIALS.password
+      ) {
+        localStorage.setItem("optionix_user", JSON.stringify(DEMO_USER));
+        setUser(DEMO_USER);
+        return { success: true };
+      }
 
-      const response = await api.post("/auth/login", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-
-      const { access_token, user: userData } = response.data;
-
-      // Store token
-      localStorage.setItem("auth_token", access_token);
-
-      // Set user data
-      setUser(userData);
-
-      return { success: true };
+      // Attempt real API login (will fail gracefully if backend is offline)
+      try {
+        const { default: api } = await import("./api");
+        const formData = new FormData();
+        formData.append("username", email);
+        formData.append("password", password);
+        const response = await api.post("/auth/login", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        const { access_token, user: userData } = response.data;
+        localStorage.setItem("auth_token", access_token);
+        localStorage.setItem("optionix_user", JSON.stringify(userData));
+        setUser(userData);
+        return { success: true };
+      } catch (_apiErr) {
+        // Backend not available – show a helpful error
+        const errorMessage =
+          "Invalid credentials. Use demo@optionix.com / demo123 to try the demo.";
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
+      }
     } catch (err) {
-      const errorMessage =
-        err.response?.data?.detail ||
-        err.message ||
-        "Login failed. Please check your credentials.";
+      const errorMessage = err.message || "Login failed.";
       setError(errorMessage);
       return { success: false, error: errorMessage };
     } finally {
@@ -77,26 +105,26 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       setError(null);
 
-      const response = await api.post("/auth/register", {
-        email,
-        password,
-        full_name: fullName,
-      });
-
-      const { access_token, user: userData } = response.data;
-
-      // Store token
-      localStorage.setItem("auth_token", access_token);
-
-      // Set user data
-      setUser(userData);
-
-      return { success: true };
+      try {
+        const { default: api } = await import("./api");
+        const response = await api.post("/auth/register", {
+          email,
+          password,
+          full_name: fullName,
+        });
+        const { access_token, user: userData } = response.data;
+        localStorage.setItem("auth_token", access_token);
+        localStorage.setItem("optionix_user", JSON.stringify(userData));
+        setUser(userData);
+        return { success: true };
+      } catch (_apiErr) {
+        const errorMessage =
+          "Registration is unavailable in demo mode. Use demo@optionix.com / demo123 to sign in.";
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
+      }
     } catch (err) {
-      const errorMessage =
-        err.response?.data?.detail ||
-        err.message ||
-        "Registration failed. Please try again.";
+      const errorMessage = err.message || "Registration failed.";
       setError(errorMessage);
       return { success: false, error: errorMessage };
     } finally {
@@ -106,6 +134,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = useCallback(() => {
     localStorage.removeItem("auth_token");
+    localStorage.removeItem("optionix_user");
     setUser(null);
     setError(null);
   }, []);

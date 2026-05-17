@@ -22,23 +22,36 @@ const LeftSection = styled.div`
   align-items: center;
 `;
 
+const BrandLogo = styled.div`
+  font-size: 20px;
+  font-weight: 700;
+  color: ${(props) => props.theme.colors.primary};
+  margin-right: 20px;
+  white-space: nowrap;
+  user-select: none;
+
+  span {
+    color: ${(props) => props.theme.colors.secondary};
+  }
+
+  @media (max-width: ${(props) => props.theme.breakpoints.tablet}) {
+    display: none;
+  }
+`;
+
 const MenuButton = styled.button`
   background: none;
   border: none;
   color: ${(props) => props.theme.colors.textSecondary};
   font-size: 24px;
   cursor: pointer;
-  margin-right: 20px;
+  margin-right: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
 
   &:hover {
     color: ${(props) => props.theme.colors.textPrimary};
-  }
-
-  @media (min-width: ${(props) => props.theme.breakpoints.tablet}) {
-    display: none;
   }
 `;
 
@@ -130,7 +143,7 @@ const UserAvatar = styled.div`
 `;
 
 const Navbar = ({ toggleSidebar }) => {
-  const [notifications, _setNotifications] = useState(3);
+  const [notifications] = useState(3);
 
   return (
     <NavbarContainer>
@@ -138,6 +151,10 @@ const Navbar = ({ toggleSidebar }) => {
         <MenuButton onClick={toggleSidebar}>
           <FiMenu />
         </MenuButton>
+
+        <BrandLogo>
+          Option<span>ix</span>
+        </BrandLogo>
 
         <SearchBar>
           <SearchIcon>

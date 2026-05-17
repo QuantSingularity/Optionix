@@ -144,6 +144,21 @@ const Link = styled.a`
   }
 `;
 
+const DemoHint = styled.div`
+  margin-top: 16px;
+  padding: 10px 14px;
+  background-color: rgba(41, 98, 255, 0.08);
+  border: 1px solid rgba(41, 98, 255, 0.25);
+  border-radius: 6px;
+  font-size: 13px;
+  color: ${(props) => props.theme.colors.textSecondary};
+  text-align: center;
+
+  strong {
+    color: ${(props) => props.theme.colors.primary};
+  }
+`;
+
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -262,6 +277,12 @@ const Login = () => {
             {isRegistering ? "Sign In" : "Sign Up"}
           </Link>
         </Footer>
+
+        {!isRegistering && (
+          <DemoHint>
+            <strong>Demo:</strong> demo@optionix.com &nbsp;/&nbsp; demo123
+          </DemoHint>
+        )}
       </LoginCard>
     </LoginContainer>
   );
