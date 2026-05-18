@@ -460,9 +460,7 @@ saved_models/
 model_weights/
 
 # ── Large binary assets (use Git LFS or external storage) ──
-*.bmp
 *.psd
-docs/images/*.bmp
 
 # ── IDE / OS ──
 .DS_Store
