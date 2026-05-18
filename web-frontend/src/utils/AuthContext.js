@@ -2,12 +2,17 @@ import { createContext, useCallback, useContext, useState } from "react";
 
 const AuthContext = createContext();
 
-const DEMO_USER = { id:1, email:"demo@optionix.com", full_name:"Demo Trader", role:"trader" };
+const DEMO_USER = {
+  id: 1,
+  email: "demo@optionix.com",
+  full_name: "Demo Trader",
+  role: "trader",
+};
 
 export const AuthProvider = ({ children }) => {
-  const [user,    setUser]    = useState(null);   // start as guest → Home page shows
-  const [loading]             = useState(false);
-  const [error,   setError]   = useState(null);
+  const [user, setUser] = useState(null); // start as guest → Home page shows
+  const [loading] = useState(false);
+  const [error, setError] = useState(null);
 
   const login = useCallback(async (email, password) => {
     try {
@@ -20,11 +25,12 @@ export const AuthProvider = ({ children }) => {
       try {
         const { default: api } = await import("./api");
         const fd = new FormData();
-        fd.append("username", email); fd.append("password", password);
+        fd.append("username", email);
+        fd.append("password", password);
         const { data } = await api.post("/auth/login", fd, {
           headers: { "Content-Type": "multipart/form-data" },
         });
-        localStorage.setItem("auth_token",    data.access_token);
+        localStorage.setItem("auth_token", data.access_token);
         localStorage.setItem("optionix_user", JSON.stringify(data.user));
         setUser(data.user);
         return { success: true };
@@ -44,13 +50,18 @@ export const AuthProvider = ({ children }) => {
     try {
       setError(null);
       const { default: api } = await import("./api");
-      const { data } = await api.post("/auth/register", { email, password, full_name: fullName });
-      localStorage.setItem("auth_token",    data.access_token);
+      const { data } = await api.post("/auth/register", {
+        email,
+        password,
+        full_name: fullName,
+      });
+      localStorage.setItem("auth_token", data.access_token);
       localStorage.setItem("optionix_user", JSON.stringify(data.user));
       setUser(data.user);
       return { success: true };
     } catch (_) {
-      const msg = "Registration unavailable in demo mode. Use demo@optionix.com / demo123.";
+      const msg =
+        "Registration unavailable in demo mode. Use demo@optionix.com / demo123.";
       setError(msg);
       return { success: false, error: msg };
     }
@@ -64,7 +75,17 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, register, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        error,
+        login,
+        register,
+        logout,
+        isAuthenticated: !!user,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

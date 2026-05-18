@@ -58,10 +58,10 @@ module.exports = (env, argv) => {
       new webpack.DefinePlugin({
         "process.env.NODE_ENV": JSON.stringify(mode),
         "process.env.REACT_APP_API_URL": JSON.stringify(
-          process.env.REACT_APP_API_URL || ""
+          process.env.REACT_APP_API_URL || "",
         ),
         "process.env.REACT_APP_WS_URL": JSON.stringify(
-          process.env.REACT_APP_WS_URL || ""
+          process.env.REACT_APP_WS_URL || "",
         ),
       }),
     ],

@@ -2,7 +2,9 @@ import axios from "axios";
 
 // API base URL - process.env values are replaced at compile time by webpack DefinePlugin
 const API_BASE_URL =
-  (typeof process !== "undefined" && process.env && process.env.REACT_APP_API_URL) ||
+  (typeof process !== "undefined" &&
+    process.env &&
+    process.env.REACT_APP_API_URL) ||
   "http://localhost:8000";
 
 // Create an axios instance with default config
@@ -79,7 +81,9 @@ api.interceptors.response.use(
 
 // WebSocket base URL
 export const WS_BASE_URL =
-  (typeof process !== "undefined" && process.env && process.env.REACT_APP_WS_URL) ||
+  (typeof process !== "undefined" &&
+    process.env &&
+    process.env.REACT_APP_WS_URL) ||
   "ws://localhost:8000/ws";
 
 export default api;
