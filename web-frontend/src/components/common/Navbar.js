@@ -1,182 +1,108 @@
 import { useState } from "react";
 import { FiBell, FiMenu, FiSearch, FiUser } from "react-icons/fi";
+import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
+import { useAuth } from "../../utils/AuthContext";
 
-const NavbarContainer = styled.header`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 70px;
-  background-color: ${(props) => props.theme.colors.backgroundLight};
-  border-bottom: 1px solid ${(props) => props.theme.colors.border};
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
-  z-index: 100;
+const Bar = styled.header`
+  position:fixed;top:0;left:0;right:0;height:70px;z-index:100;
+  background:rgba(17,24,39,.92);backdrop-filter:blur(16px);
+  border-bottom:1px solid ${p=>p.theme.colors.border};
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;
 `;
 
-const LeftSection = styled.div`
-  display: flex;
-  align-items: center;
+const Left = styled.div`display:flex;align-items:center;gap:12px;`;
+
+const MenuBtn = styled.button`
+  background:none;border:none;color:${p=>p.theme.colors.textSecondary};
+  font-size:22px;cursor:pointer;display:flex;align-items:center;
+  padding:6px;border-radius:6px;transition:all .2s;
+  &:hover{color:${p=>p.theme.colors.textPrimary};background:rgba(255,255,255,.05);}
 `;
 
-const BrandLogo = styled.div`
-  font-size: 20px;
-  font-weight: 700;
-  color: ${(props) => props.theme.colors.primary};
-  margin-right: 20px;
-  white-space: nowrap;
-  user-select: none;
-
-  span {
-    color: ${(props) => props.theme.colors.secondary};
-  }
-
-  @media (max-width: ${(props) => props.theme.breakpoints.tablet}) {
-    display: none;
-  }
+const Brand = styled.div`
+  font-family:${p=>p.theme.fonts.display};font-size:19px;font-weight:800;
+  color:${p=>p.theme.colors.primary};letter-spacing:-.4px;margin-right:8px;
+  span{color:${p=>p.theme.colors.secondary};}
+  @media(max-width:${p=>p.theme.breakpoints.tablet}){display:none;}
 `;
 
-const MenuButton = styled.button`
-  background: none;
-  border: none;
-  color: ${(props) => props.theme.colors.textSecondary};
-  font-size: 24px;
-  cursor: pointer;
-  margin-right: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  &:hover {
-    color: ${(props) => props.theme.colors.textPrimary};
-  }
+const Search = styled.div`
+  position:relative;
+  @media(max-width:${p=>p.theme.breakpoints.tablet}){display:none;}
 `;
-
-const SearchBar = styled.div`
-  position: relative;
-  width: 300px;
-
-  @media (max-width: ${(props) => props.theme.breakpoints.tablet}) {
-    display: none;
-  }
-`;
-
 const SearchInput = styled.input`
-  background-color: ${(props) => props.theme.colors.backgroundDark};
-  border: 1px solid ${(props) => props.theme.colors.border};
-  border-radius: 4px;
-  padding: 8px 12px 8px 36px;
-  color: ${(props) => props.theme.colors.textPrimary};
-  width: 100%;
-
-  &:focus {
-    outline: none;
-    border-color: ${(props) => props.theme.colors.primary};
-  }
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+  border-radius:8px;padding:8px 14px 8px 38px;width:260px;
+  color:${p=>p.theme.colors.textPrimary};font-size:13.5px;
+  &:focus{outline:none;border-color:rgba(59,130,246,.4);background:rgba(59,130,246,.05);}
+  &::placeholder{color:#475569;}
 `;
-
 const SearchIcon = styled.div`
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: ${(props) => props.theme.colors.textSecondary};
-  font-size: 16px;
+  position:absolute;left:12px;top:50%;transform:translateY(-50%);
+  color:#475569;font-size:15px;display:flex;pointer-events:none;
 `;
 
-const RightSection = styled.div`
-  display: flex;
-  align-items: center;
+const Right = styled.div`display:flex;align-items:center;gap:6px;`;
+
+const IconBtn = styled.button`
+  background:none;border:none;color:${p=>p.theme.colors.textSecondary};
+  font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  padding:8px;border-radius:8px;position:relative;transition:all .2s;
+  &:hover{color:${p=>p.theme.colors.textPrimary};background:rgba(255,255,255,.05);}
+`;
+const Badge = styled.span`
+  position:absolute;top:4px;right:4px;width:15px;height:15px;border-radius:50%;
+  background:#ef4444;color:#fff;font-size:9px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
 `;
 
-const IconButton = styled.button`
-  background: none;
-  border: none;
-  color: ${(props) => props.theme.colors.textSecondary};
-  font-size: 20px;
-  cursor: pointer;
-  margin-left: 16px;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  &:hover {
-    color: ${(props) => props.theme.colors.textPrimary};
-  }
+const Avatar = styled.button`
+  display:flex;align-items:center;gap:8px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+  border-radius:8px;padding:6px 12px 6px 8px;cursor:pointer;transition:all .2s;
+  &:hover{background:rgba(255,255,255,.08);}
 `;
-
-const NotificationBadge = styled.span`
-  position: absolute;
-  top: -5px;
-  right: -5px;
-  background-color: ${(props) => props.theme.colors.danger};
-  color: white;
-  font-size: 10px;
-  font-weight: bold;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+const AvatarCircle = styled.div`
+  width:28px;height:28px;border-radius:50%;
+  background:linear-gradient(135deg,#3b82f6,#2563eb);
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:14px;
 `;
-
-const UserAvatar = styled.div`
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background-color: ${(props) => props.theme.colors.primary};
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: 16px;
-  cursor: pointer;
-
-  &:hover {
-    background-color: ${(props) => props.theme.colors.primaryDark};
-  }
+const AvatarName = styled.span`
+  font-size:13.5px;font-weight:600;color:${p=>p.theme.colors.textPrimary};
+  @media(max-width:${p=>p.theme.breakpoints.tablet}){display:none;}
 `;
 
 const Navbar = ({ toggleSidebar }) => {
-  const [notifications] = useState(3);
+  const [notifs]  = useState(3);
+  const { user }  = useAuth();
+  const navigate  = useNavigate();
 
   return (
-    <NavbarContainer>
-      <LeftSection>
-        <MenuButton onClick={toggleSidebar}>
-          <FiMenu />
-        </MenuButton>
+    <Bar>
+      <Left>
+        <MenuBtn onClick={toggleSidebar}><FiMenu /></MenuBtn>
+        <Brand>Option<span>ix</span></Brand>
+        <Search>
+          <SearchIcon><FiSearch /></SearchIcon>
+          <SearchInput placeholder="Search markets, assets…" />
+        </Search>
+      </Left>
 
-        <BrandLogo>
-          Option<span>ix</span>
-        </BrandLogo>
-
-        <SearchBar>
-          <SearchIcon>
-            <FiSearch />
-          </SearchIcon>
-          <SearchInput placeholder="Search..." />
-        </SearchBar>
-      </LeftSection>
-
-      <RightSection>
-        <IconButton>
+      <Right>
+        <IconBtn>
           <FiBell />
-          {notifications > 0 && (
-            <NotificationBadge>{notifications}</NotificationBadge>
-          )}
-        </IconButton>
+          {notifs > 0 && <Badge>{notifs}</Badge>}
+        </IconBtn>
 
-        <UserAvatar>
-          <FiUser />
-        </UserAvatar>
-      </RightSection>
-    </NavbarContainer>
+        <Avatar onClick={() => navigate("/dashboard")}>
+          <AvatarCircle><FiUser /></AvatarCircle>
+          <AvatarName>{user?.full_name?.split(" ")[0] || "Trader"}</AvatarName>
+        </Avatar>
+      </Right>
+    </Bar>
   );
 };
 

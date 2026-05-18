@@ -1,9 +1,9 @@
 import axios from "axios";
 
-// Get API URL from environment variable or use default
+// API base URL - process.env values are replaced at compile time by webpack DefinePlugin
 const API_BASE_URL =
-  process.env.REACT_APP_API_URL ||
-  (process.env.NODE_ENV === "production" ? "/api" : "http://localhost:8000");
+  (typeof process !== "undefined" && process.env && process.env.REACT_APP_API_URL) ||
+  "http://localhost:8000";
 
 // Create an axios instance with default config
 const api = axios.create({
@@ -77,11 +77,9 @@ api.interceptors.response.use(
   },
 );
 
-// Export API instance and base URL for WebSocket connections
+// WebSocket base URL
 export const WS_BASE_URL =
-  process.env.REACT_APP_WS_URL ||
-  (process.env.NODE_ENV === "production"
-    ? "wss://api.optionix.com/ws"
-    : "ws://localhost:8000/ws");
+  (typeof process !== "undefined" && process.env && process.env.REACT_APP_WS_URL) ||
+  "ws://localhost:8000/ws";
 
 export default api;

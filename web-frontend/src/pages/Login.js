@@ -1,290 +1,217 @@
 import { useState } from "react";
-import { FiAlertCircle, FiLock, FiMail } from "react-icons/fi";
-import { useNavigate } from "react-router-dom";
-import styled from "styled-components";
+import { FiAlertCircle, FiArrowLeft, FiLock, FiMail, FiUser } from "react-icons/fi";
+import { Link, Navigate, useNavigate } from "react-router-dom";
+import styled, { keyframes } from "styled-components";
 import { useAuth } from "../utils/AuthContext";
 
-const LoginContainer = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  background-color: ${(props) => props.theme.colors.backgroundDark};
-  padding: 20px;
+const fadeIn = keyframes`from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}`;
+
+const Page = styled.div`
+  min-height:100vh;display:flex;
+  background:#0b0e17;
+  position:relative;overflow:hidden;
+  &::before{
+    content:'';position:absolute;inset:0;
+    background-image:linear-gradient(rgba(59,130,246,.04) 1px,transparent 1px),
+                     linear-gradient(90deg,rgba(59,130,246,.04) 1px,transparent 1px);
+    background-size:56px 56px;
+    mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,black 30%,transparent 100%);
+  }
 `;
 
-const LoginCard = styled.div`
-  background-color: ${(props) => props.theme.colors.cardBg};
-  border-radius: 12px;
-  padding: 40px;
-  width: 100%;
-  max-width: 450px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-  border: 1px solid ${(props) => props.theme.colors.border};
+const GlowLeft  = styled.div`position:absolute;top:-10%;left:-5%;width:500px;height:500px;border-radius:50%;background:rgba(59,130,246,.1);filter:blur(90px);pointer-events:none;`;
+const GlowRight = styled.div`position:absolute;bottom:-10%;right:-5%;width:400px;height:400px;border-radius:50%;background:rgba(139,92,246,.08);filter:blur(80px);pointer-events:none;`;
+
+const Card = styled.div`
+  position:relative;z-index:1;
+  width:100%;max-width:460px;margin:auto;
+  padding:48px 44px;
+  background:rgba(17,24,39,.9);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:20px;
+  box-shadow:0 32px 80px rgba(0,0,0,.5);
+  backdrop-filter:blur(12px);
+  animation:${fadeIn} .5s ease both;
+
+  @media(max-width:520px){padding:36px 24px;margin:24px;}
+`;
+
+const BackLink = styled(Link)`
+  display:inline-flex;align-items:center;gap:6px;
+  color:#64748b;font-size:13px;font-weight:500;
+  margin-bottom:32px;transition:color .2s;
+  &:hover{color:#94a3b8;}
 `;
 
 const Logo = styled.div`
-  text-align: center;
-  margin-bottom: 32px;
+  text-align:center;margin-bottom:36px;
+`;
+const LogoText = styled.div`
+  font-family:'Syne',sans-serif;font-size:26px;font-weight:800;
+  color:#3b82f6;letter-spacing:-.5px;margin-bottom:6px;
+  span{color:#f97316;}
+`;
+const LogoSub = styled.p`color:#64748b;font-size:14px;`;
+
+const Tabs = styled.div`
+  display:flex;background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.07);border-radius:10px;
+  padding:4px;margin-bottom:32px;gap:4px;
+`;
+const Tab = styled.button`
+  flex:1;padding:9px;border-radius:7px;border:none;cursor:pointer;
+  font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;
+  transition:all .2s;
+  ${p=>p.$active
+    ? `background:#3b82f6;color:#fff;box-shadow:0 2px 12px rgba(59,130,246,.4);`
+    : `background:transparent;color:#64748b;&:hover{color:#94a3b8;}`}
 `;
 
-const LogoText = styled.h1`
-  color: ${(props) => props.theme.colors.primary};
-  font-size: 32px;
-  font-weight: 700;
-  margin-bottom: 8px;
-`;
-
-const Subtitle = styled.p`
-  color: ${(props) => props.theme.colors.textSecondary};
-  font-size: 14px;
-`;
-
-const Form = styled.form`
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-`;
-
-const InputGroup = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-`;
-
+const Field = styled.div`margin-bottom:20px;`;
 const Label = styled.label`
-  color: ${(props) => props.theme.colors.textPrimary};
-  font-size: 14px;
-  font-weight: 500;
+  display:block;font-size:13px;font-weight:600;color:#94a3b8;
+  margin-bottom:8px;letter-spacing:.02em;
 `;
-
-const InputWrapper = styled.div`
-  position: relative;
-  display: flex;
-  align-items: center;
+const InputWrap = styled.div`
+  position:relative;display:flex;align-items:center;
 `;
-
 const InputIcon = styled.div`
-  position: absolute;
-  left: 12px;
-  color: ${(props) => props.theme.colors.textSecondary};
-  display: flex;
-  align-items: center;
+  position:absolute;left:14px;color:#475569;font-size:16px;
+  display:flex;align-items:center;pointer-events:none;
 `;
-
 const Input = styled.input`
-  width: 100%;
-  padding: 12px 12px 12px 40px;
-  background-color: ${(props) => props.theme.colors.backgroundLight};
-  border: 1px solid ${(props) => props.theme.colors.border};
-  border-radius: 6px;
-  color: ${(props) => props.theme.colors.textPrimary};
-  font-size: 14px;
-  transition: border-color 0.2s;
-
-  &:focus {
-    outline: none;
-    border-color: ${(props) => props.theme.colors.primary};
+  width:100%;padding:12px 14px 12px 42px;
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.08);border-radius:10px;
+  color:#f1f5f9;font-size:14px;
+  transition:all .2s;
+  &:focus{
+    outline:none;
+    border-color:rgba(59,130,246,.5);
+    background:rgba(59,130,246,.05);
+    box-shadow:0 0 0 3px rgba(59,130,246,.12);
   }
-
-  &::placeholder {
-    color: ${(props) => props.theme.colors.textSecondary};
-  }
+  &::placeholder{color:#334155;}
 `;
 
-const ErrorMessage = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px;
-  background-color: rgba(239, 83, 80, 0.1);
-  border: 1px solid ${(props) => props.theme.colors.danger};
-  border-radius: 6px;
-  color: ${(props) => props.theme.colors.danger};
-  font-size: 14px;
+const ErrorBox = styled.div`
+  display:flex;align-items:flex-start;gap:10px;
+  padding:12px 16px;margin-bottom:20px;
+  background:rgba(239,68,68,.08);
+  border:1px solid rgba(239,68,68,.25);border-radius:10px;
+  color:#f87171;font-size:13.5px;line-height:1.5;
+  svg{flex-shrink:0;margin-top:1px;}
 `;
 
-const Button = styled.button`
-  padding: 14px;
-  background-color: ${(props) => props.theme.colors.primary};
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  margin-top: 8px;
-
-  &:hover {
-    background-color: ${(props) => props.theme.colors.primaryDark};
-  }
-
-  &:disabled {
-    background-color: ${(props) => props.theme.colors.border};
-    cursor: not-allowed;
-  }
+const SubmitBtn = styled.button`
+  width:100%;padding:14px;margin-top:4px;
+  background:linear-gradient(135deg,#3b82f6,#2563eb);
+  color:#fff;border:none;border-radius:10px;
+  font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;
+  cursor:pointer;transition:all .25s;
+  box-shadow:0 4px 20px rgba(59,130,246,.35);
+  &:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 8px 28px rgba(59,130,246,.45);}
+  &:disabled{opacity:.55;cursor:not-allowed;transform:none;}
 `;
 
-const Footer = styled.div`
-  margin-top: 24px;
-  text-align: center;
-  color: ${(props) => props.theme.colors.textSecondary};
-  font-size: 14px;
+const Divider = styled.div`
+  display:flex;align-items:center;gap:12px;margin:24px 0;
+  &::before,&::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.07);}
+  span{color:#334155;font-size:12px;white-space:nowrap;}
 `;
 
-const Link = styled.a`
-  color: ${(props) => props.theme.colors.primary};
-  text-decoration: none;
-  font-weight: 500;
-  cursor: pointer;
-
-  &:hover {
-    text-decoration: underline;
-  }
-`;
-
-const DemoHint = styled.div`
-  margin-top: 16px;
-  padding: 10px 14px;
-  background-color: rgba(41, 98, 255, 0.08);
-  border: 1px solid rgba(41, 98, 255, 0.25);
-  border-radius: 6px;
-  font-size: 13px;
-  color: ${(props) => props.theme.colors.textSecondary};
-  text-align: center;
-
-  strong {
-    color: ${(props) => props.theme.colors.primary};
-  }
+const DemoBtn = styled.button`
+  width:100%;padding:12px;
+  background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.08);border-radius:10px;
+  color:#64748b;font-family:'DM Sans',sans-serif;font-size:13.5px;
+  cursor:pointer;transition:all .2s;
+  strong{color:#3b82f6;}
+  &:hover{background:rgba(59,130,246,.06);border-color:rgba(59,130,246,.2);color:#94a3b8;}
 `;
 
 const Login = () => {
-  const [email, setEmail] = useState("");
+  const [tab,      setTab]      = useState("signin");
+  const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
-  const [isRegistering, setIsRegistering] = useState(false);
   const [fullName, setFullName] = useState("");
-  const { login, register, loading, error } = useAuth();
+  const { login, register, loading, error, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+
+  const handleSubmit = async e => {
     e.preventDefault();
-
-    if (isRegistering) {
-      const result = await register(email, password, fullName);
-      if (result.success) {
-        navigate("/");
-      }
-    } else {
-      const result = await login(email, password);
-      if (result.success) {
-        navigate("/");
-      }
-    }
+    const result = tab === "signin"
+      ? await login(email, password)
+      : await register(email, password, fullName);
+    if (result.success) navigate("/dashboard");
   };
 
-  const toggleMode = () => {
-    setIsRegistering(!isRegistering);
-    setFullName("");
-  };
+  const fillDemo = () => { setEmail("demo@optionix.com"); setPassword("demo123"); setTab("signin"); };
 
   return (
-    <LoginContainer>
-      <LoginCard>
+    <Page>
+      <GlowLeft /><GlowRight />
+      <Card>
+        <BackLink to="/"><FiArrowLeft /> Back to home</BackLink>
+
         <Logo>
-          <LogoText>Optionix</LogoText>
-          <Subtitle>
-            {isRegistering ? "Create your account" : "Welcome back"}
-          </Subtitle>
+          <LogoText>Option<span>ix</span></LogoText>
+          <LogoSub>{tab === "signin" ? "Welcome back — sign in to continue" : "Create your free account"}</LogoSub>
         </Logo>
 
-        <Form onSubmit={handleSubmit}>
-          {isRegistering && (
-            <InputGroup>
-              <Label htmlFor="fullName">Full Name</Label>
-              <InputWrapper>
-                <InputIcon>
-                  <FiMail size={18} />
-                </InputIcon>
-                <Input
-                  id="fullName"
-                  type="text"
-                  placeholder="Enter your full name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  required
-                />
-              </InputWrapper>
-            </InputGroup>
+        <Tabs>
+          <Tab $active={tab==="signin"}   onClick={() => setTab("signin")}>Sign In</Tab>
+          <Tab $active={tab==="register"} onClick={() => setTab("register")}>Register</Tab>
+        </Tabs>
+
+        <form onSubmit={handleSubmit}>
+          {tab === "register" && (
+            <Field>
+              <Label>Full Name</Label>
+              <InputWrap>
+                <InputIcon><FiUser /></InputIcon>
+                <Input type="text" placeholder="Jane Smith" value={fullName}
+                  onChange={e => setFullName(e.target.value)} required />
+              </InputWrap>
+            </Field>
           )}
 
-          <InputGroup>
-            <Label htmlFor="email">Email</Label>
-            <InputWrapper>
-              <InputIcon>
-                <FiMail size={18} />
-              </InputIcon>
-              <Input
-                id="email"
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </InputWrapper>
-          </InputGroup>
+          <Field>
+            <Label>Email Address</Label>
+            <InputWrap>
+              <InputIcon><FiMail /></InputIcon>
+              <Input type="email" placeholder="you@example.com" value={email}
+                onChange={e => setEmail(e.target.value)} required />
+            </InputWrap>
+          </Field>
 
-          <InputGroup>
-            <Label htmlFor="password">Password</Label>
-            <InputWrapper>
-              <InputIcon>
-                <FiLock size={18} />
-              </InputIcon>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-              />
-            </InputWrapper>
-          </InputGroup>
+          <Field>
+            <Label>Password</Label>
+            <InputWrap>
+              <InputIcon><FiLock /></InputIcon>
+              <Input type="password" placeholder="••••••••" value={password}
+                onChange={e => setPassword(e.target.value)} required minLength={6} />
+            </InputWrap>
+          </Field>
 
           {error && (
-            <ErrorMessage>
-              <FiAlertCircle size={18} />
-              <span>{error}</span>
-            </ErrorMessage>
+            <ErrorBox><FiAlertCircle size={16} /><span>{error}</span></ErrorBox>
           )}
 
-          <Button type="submit" disabled={loading}>
-            {loading
-              ? "Loading..."
-              : isRegistering
-                ? "Create Account"
-                : "Sign In"}
-          </Button>
-        </Form>
+          <SubmitBtn type="submit" disabled={loading}>
+            {loading ? "Please wait…" : tab === "signin" ? "Sign In to Dashboard" : "Create Account"}
+          </SubmitBtn>
+        </form>
 
-        <Footer>
-          {isRegistering
-            ? "Already have an account?"
-            : "Don't have an account?"}{" "}
-          <Link onClick={toggleMode}>
-            {isRegistering ? "Sign In" : "Sign Up"}
-          </Link>
-        </Footer>
+        <Divider><span>or try the demo</span></Divider>
 
-        {!isRegistering && (
-          <DemoHint>
-            <strong>Demo:</strong> demo@optionix.com &nbsp;/&nbsp; demo123
-          </DemoHint>
-        )}
-      </LoginCard>
-    </LoginContainer>
+        <DemoBtn type="button" onClick={fillDemo}>
+          <strong>Demo account:</strong> &nbsp;demo@optionix.com &nbsp;/&nbsp; demo123
+        </DemoBtn>
+      </Card>
+    </Page>
   );
 };
 

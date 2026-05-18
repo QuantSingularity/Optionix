@@ -1,170 +1,86 @@
-import {
-  FiBriefcase,
-  FiHome,
-  FiLogOut,
-  FiPieChart,
-  FiSettings,
-  FiTrendingUp,
-} from "react-icons/fi";
+import { FiBarChart2, FiBriefcase, FiGrid, FiLogOut, FiSettings, FiTrendingUp } from "react-icons/fi";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import { useAuth } from "../../utils/AuthContext";
 
-const SidebarContainer = styled.aside`
-  position: fixed;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 240px;
-  background-color: ${(props) => props.theme.colors.backgroundLight};
-  border-right: 1px solid ${(props) => props.theme.colors.border};
-  padding-top: 70px;
-  transition: transform 0.3s ease;
-  z-index: 90;
-
-  @media (max-width: ${(props) => props.theme.breakpoints.tablet}) {
-    transform: translateX(${(props) => (props.isOpen ? "0" : "-100%")});
+const Side = styled.aside`
+  position:fixed;left:0;top:0;bottom:0;width:240px;
+  background:${p=>p.theme.colors.backgroundLight};
+  border-right:1px solid ${p=>p.theme.colors.border};
+  padding-top:70px;z-index:90;
+  display:flex;flex-direction:column;
+  transition:transform .3s ease;
+  @media(max-width:${p=>p.theme.breakpoints.tablet}){
+    transform:translateX(${p=>p.$open?'0':'-100%'});
   }
 `;
 
-const Logo = styled.div`
-  padding: 16px 20px 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  h1 {
-    font-size: 22px;
-    font-weight: 700;
-    color: ${(props) => props.theme.colors.primary};
-    margin: 0;
-  }
-
-  span {
-    color: ${(props) => props.theme.colors.secondary};
-  }
+const Logo = styled(Link)`
+  display:block;padding:20px 20px 16px;
+  font-family:${p=>p.theme.fonts.display};font-size:20px;font-weight:800;
+  color:${p=>p.theme.colors.primary};letter-spacing:-.4px;
+  span{color:${p=>p.theme.colors.secondary};}
 `;
 
-const NavMenu = styled.nav`
-  margin-top: 8px;
-`;
+const Nav = styled.nav`flex:1;padding:8px 12px;overflow-y:auto;`;
 
-/* Use transient prop $active to avoid passing it to the DOM */
 const NavItem = styled(Link)`
-  display: flex;
-  align-items: center;
-  padding: 12px 20px;
-  color: ${(props) =>
-    props.$active
-      ? props.theme.colors.primary
-      : props.theme.colors.textSecondary};
-  background-color: ${(props) =>
-    props.$active ? "rgba(41, 98, 255, 0.1)" : "transparent"};
-  border-left: 3px solid
-    ${(props) => (props.$active ? props.theme.colors.primary : "transparent")};
-  transition: all 0.2s ease;
-  text-decoration: none;
-
-  &:hover {
-    color: ${(props) => props.theme.colors.primary};
-    background-color: rgba(41, 98, 255, 0.05);
-  }
-
-  svg {
-    margin-right: 12px;
-    font-size: 18px;
-    flex-shrink: 0;
-  }
+  display:flex;align-items:center;gap:11px;
+  padding:10px 12px;border-radius:8px;margin-bottom:2px;
+  font-size:14px;font-weight:${p=>p.$active?'600':'500'};
+  color:${p=>p.$active?p.theme.colors.primary:p.theme.colors.textSecondary};
+  background:${p=>p.$active?'rgba(59,130,246,.1)':'transparent'};
+  border-left:2px solid ${p=>p.$active?p.theme.colors.primary:'transparent'};
+  transition:all .18s;
+  &:hover{color:${p=>p.theme.colors.primary};background:rgba(59,130,246,.06);}
+  svg{font-size:17px;flex-shrink:0;}
 `;
 
-const LogoutButton = styled.button`
-  display: flex;
-  align-items: center;
-  width: 100%;
-  padding: 12px 20px;
-  color: ${(props) => props.theme.colors.textSecondary};
-  background-color: transparent;
-  border: none;
-  border-left: 3px solid transparent;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 14px;
-
-  &:hover {
-    color: ${(props) => props.theme.colors.danger};
-    background-color: rgba(239, 83, 80, 0.05);
-  }
-
-  svg {
-    margin-right: 12px;
-    font-size: 18px;
-    flex-shrink: 0;
-  }
+const Footer = styled.div`
+  padding:12px;border-top:1px solid ${p=>p.theme.colors.border};
+`;
+const LogoutBtn = styled.button`
+  display:flex;align-items:center;gap:10px;width:100%;
+  padding:10px 12px;border-radius:8px;border:none;
+  background:transparent;color:${p=>p.theme.colors.textSecondary};
+  font-family:${p=>p.theme.fonts.body};font-size:14px;font-weight:500;
+  cursor:pointer;transition:all .18s;
+  &:hover{color:#ef4444;background:rgba(239,68,68,.07);}
+  svg{font-size:17px;}
 `;
 
-const SidebarFooter = styled.div`
-  position: absolute;
-  bottom: 0;
-  width: 100%;
-  padding: 12px 0;
-  border-top: 1px solid ${(props) => props.theme.colors.border};
-`;
-
-const FooterText = styled.p`
-  font-size: 11px;
-  color: ${(props) => props.theme.colors.textSecondary};
-  text-align: center;
-  margin: 0 0 8px;
-  opacity: 0.6;
-`;
+const NAV = [
+  {icon:<FiGrid/>,       label:"Dashboard", path:"/dashboard"},
+  {icon:<FiTrendingUp/>, label:"Trading",   path:"/dashboard/trading"},
+  {icon:<FiBriefcase/>,  label:"Portfolio", path:"/dashboard/portfolio"},
+  {icon:<FiBarChart2/>,  label:"Analytics", path:"/dashboard/analytics"},
+  {icon:<FiSettings/>,   label:"Settings",  path:"/dashboard/settings"},
+];
 
 const Sidebar = ({ isOpen }) => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { pathname } = useLocation();
+  const navigate     = useNavigate();
+  const { logout }   = useAuth();
 
-  const navItems = [
-    { icon: <FiHome />, label: "Dashboard", path: "/" },
-    { icon: <FiTrendingUp />, label: "Trading", path: "/trading" },
-    { icon: <FiBriefcase />, label: "Portfolio", path: "/portfolio" },
-    { icon: <FiPieChart />, label: "Analytics", path: "/analytics" },
-    { icon: <FiSettings />, label: "Settings", path: "/settings" },
-  ];
+  const isActive = path =>
+    path === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(path);
 
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
-  };
+  const handleLogout = () => { logout(); navigate("/"); };
 
   return (
-    <SidebarContainer isOpen={isOpen}>
-      <Logo>
-        <h1>
-          Option<span>ix</span>
-        </h1>
-      </Logo>
-
-      <NavMenu>
-        {navItems.map((item, index) => (
-          <NavItem
-            key={index}
-            to={item.path}
-            $active={location.pathname === item.path}
-          >
-            {item.icon}
-            {item.label}
+    <Side $open={isOpen}>
+      <Logo to="/dashboard">Option<span>ix</span></Logo>
+      <Nav>
+        {NAV.map(item => (
+          <NavItem key={item.path} to={item.path} $active={isActive(item.path)}>
+            {item.icon}{item.label}
           </NavItem>
         ))}
-      </NavMenu>
-
-      <SidebarFooter>
-        <FooterText>Optionix v1.0.0</FooterText>
-        <LogoutButton onClick={handleLogout}>
-          <FiLogOut />
-          Logout
-        </LogoutButton>
-      </SidebarFooter>
-    </SidebarContainer>
+      </Nav>
+      <Footer>
+        <LogoutBtn onClick={handleLogout}><FiLogOut /> Logout</LogoutBtn>
+      </Footer>
+    </Side>
   );
 };
 

@@ -1,134 +1,138 @@
 import React from "react";
-import { FiAlertTriangle } from "react-icons/fi";
-import styled from "styled-components";
 
-const ErrorContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 400px;
-  padding: 40px;
-  background-color: ${(props) => props.theme.colors.cardBg};
-  border-radius: 8px;
-  border: 1px solid ${(props) => props.theme.colors.border};
-  margin: 20px;
-`;
-
-const ErrorIcon = styled(FiAlertTriangle)`
-  font-size: 64px;
-  color: ${(props) => props.theme.colors.danger};
-  margin-bottom: 20px;
-`;
-
-const ErrorTitle = styled.h2`
-  color: ${(props) => props.theme.colors.textPrimary};
-  font-size: 24px;
-  margin-bottom: 12px;
-`;
-
-const ErrorMessage = styled.p`
-  color: ${(props) => props.theme.colors.textSecondary};
-  font-size: 16px;
-  text-align: center;
-  max-width: 500px;
-  margin-bottom: 24px;
-`;
-
-const ErrorDetails = styled.details`
-  color: ${(props) => props.theme.colors.textSecondary};
-  font-size: 14px;
-  font-family: monospace;
-  max-width: 600px;
-  margin-bottom: 24px;
-  cursor: pointer;
-
-  summary {
-    margin-bottom: 8px;
-    font-weight: 500;
-  }
-
-  pre {
-    background-color: ${(props) => props.theme.colors.backgroundDark};
-    padding: 12px;
-    border-radius: 4px;
-    overflow-x: auto;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-  }
-`;
-
-const ReloadButton = styled.button`
-  background-color: ${(props) => props.theme.colors.primary};
-  color: white;
-  padding: 12px 24px;
-  border-radius: 4px;
-  border: none;
-  font-size: 16px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-
-  &:hover {
-    background-color: ${(props) => props.theme.colors.primaryDark};
-  }
-`;
+// ErrorBoundary intentionally uses ONLY inline styles for its error UI.
+// If styled-components itself is what crashed, we cannot use it to display
+// the error — we'd get a second crash and a permanently blank page.
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-      errorInfo: null,
-    };
+    this.state = { hasError: false, error: null, errorInfo: null };
   }
 
-  static getDerivedStateFromError(_error) {
-    return { hasError: true };
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error("Error boundary caught an error:", error, errorInfo);
-    this.setState({
-      error,
-      errorInfo,
-    });
-
-    // Log error to monitoring service if available
-    if (window.errorLogger) {
-      window.errorLogger.log(error, errorInfo);
-    }
+    console.error("ErrorBoundary caught:", error, errorInfo);
+    this.setState({ errorInfo });
   }
 
   handleReload = () => {
-    this.setState({ hasError: false, error: null, errorInfo: null });
     window.location.reload();
   };
 
   render() {
     if (this.state.hasError) {
+      const isDev = process.env.NODE_ENV === "development";
+
       return (
-        <ErrorContainer>
-          <ErrorIcon />
-          <ErrorTitle>Oops! Something went wrong</ErrorTitle>
-          <ErrorMessage>
-            We're sorry for the inconvenience. An unexpected error has occurred.
-            Please try reloading the page.
-          </ErrorMessage>
-          {process.env.NODE_ENV === "development" && this.state.error && (
-            <ErrorDetails>
-              <summary>Error Details (Development Mode)</summary>
-              <pre>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            minHeight: "100vh",
+            backgroundColor: "#131722",
+            color: "#ffffff",
+            padding: "40px",
+            fontFamily:
+              "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+            boxSizing: "border-box",
+          }}
+        >
+          <div
+            style={{ fontSize: "48px", marginBottom: "16px", lineHeight: 1 }}
+          >
+            ⚠️
+          </div>
+
+          <h2
+            style={{
+              color: "#ffffff",
+              fontSize: "22px",
+              fontWeight: 700,
+              margin: "0 0 10px",
+            }}
+          >
+            Something went wrong
+          </h2>
+
+          <p
+            style={{
+              color: "#b2b5be",
+              fontSize: "15px",
+              margin: "0 0 28px",
+              textAlign: "center",
+              maxWidth: "480px",
+            }}
+          >
+            An unexpected error occurred. Please reload the page to continue.
+          </p>
+
+          {isDev && this.state.error && (
+            <details
+              style={{
+                width: "100%",
+                maxWidth: "720px",
+                marginBottom: "28px",
+                cursor: "pointer",
+              }}
+            >
+              <summary
+                style={{
+                  color: "#b2b5be",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  marginBottom: "8px",
+                  outline: "none",
+                }}
+              >
+                Error details (development)
+              </summary>
+              <pre
+                style={{
+                  backgroundColor: "#1e222d",
+                  border: "1px solid #2a2e39",
+                  borderRadius: "6px",
+                  padding: "14px",
+                  overflowX: "auto",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  fontSize: "12px",
+                  color: "#ef5350",
+                  margin: 0,
+                }}
+              >
                 <strong>Error:</strong> {this.state.error.toString()}
                 {"\n\n"}
-                <strong>Stack Trace:</strong>
+                <strong style={{ color: "#b2b5be" }}>Component Stack:</strong>
                 {"\n"}
-                {this.state.errorInfo?.componentStack}
+                <span style={{ color: "#b2b5be" }}>
+                  {this.state.errorInfo?.componentStack}
+                </span>
               </pre>
-            </ErrorDetails>
+            </details>
           )}
-          <ReloadButton onClick={this.handleReload}>Reload Page</ReloadButton>
-        </ErrorContainer>
+
+          <button
+            onClick={this.handleReload}
+            style={{
+              backgroundColor: "#2962ff",
+              color: "white",
+              padding: "12px 28px",
+              border: "none",
+              borderRadius: "6px",
+              fontSize: "15px",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Reload Page
+          </button>
+        </div>
       );
     }
 

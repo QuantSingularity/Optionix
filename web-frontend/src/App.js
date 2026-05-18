@@ -1,161 +1,154 @@
 import { useState } from "react";
-import {
-  Navigate,
-  Route,
-  BrowserRouter as Router,
-  Routes,
-} from "react-router-dom";
+import { Navigate, Route, BrowserRouter as Router, Routes } from "react-router-dom";
 import styled, { ThemeProvider } from "styled-components";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import Footer from "./components/common/Footer";
-// Components
 import Navbar from "./components/common/Navbar";
 import Sidebar from "./components/common/Sidebar";
 import Analytics from "./pages/Analytics";
-// Pages
 import Dashboard from "./pages/Dashboard";
+import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Portfolio from "./pages/Portfolio";
 import Trading from "./pages/Trading";
 import { AppProvider } from "./utils/AppContext";
 import { AuthProvider, useAuth } from "./utils/AuthContext";
 
-// Theme
 const theme = {
   colors: {
-    primary: "#2962ff",
-    primaryDark: "#0039cb",
-    primaryLight: "#768fff",
-    secondary: "#ff6d00",
-    secondaryDark: "#c43c00",
-    secondaryLight: "#ff9e40",
-    backgroundDark: "#131722",
-    backgroundLight: "#1e222d",
-    textPrimary: "#ffffff",
-    textSecondary: "#b2b5be",
-    success: "#26a69a",
-    danger: "#ef5350",
-    warning: "#ffca28",
-    info: "#42a5f5",
-    border: "#2a2e39",
-    cardBg: "#1e222d",
+    primary:         "#3b82f6",
+    primaryDark:     "#2563eb",
+    primaryLight:    "#93c5fd",
+    secondary:       "#f97316",
+    secondaryDark:   "#c2410c",
+    secondaryLight:  "#fdba74",
+    backgroundDark:  "#0b0e17",
+    backgroundLight: "#111827",
+    backgroundElevated:"#161d2e",
+    textPrimary:     "#f1f5f9",
+    textSecondary:   "#94a3b8",
+    success:         "#10b981",
+    danger:          "#ef4444",
+    warning:         "#f59e0b",
+    info:            "#06b6d4",
+    border:          "rgba(255,255,255,0.07)",
+    borderAccent:    "rgba(59,130,246,0.3)",
+    cardBg:          "#111827",
   },
   breakpoints: {
-    mobile: "576px",
-    tablet: "768px",
+    mobile:  "576px",
+    tablet:  "768px",
     desktop: "992px",
-    wide: "1200px",
+    wide:    "1200px",
+  },
+  fonts: {
+    display: "'Syne', sans-serif",
+    body:    "'DM Sans', sans-serif",
+    mono:    "'DM Mono', monospace",
   },
 };
 
-const AppContainer = styled.div`
+/* ─── Authenticated app shell ────────────────────────────── */
+const Shell = styled.div`
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background-color: ${(props) => props.theme.colors.backgroundDark};
-  color: ${(props) => props.theme.colors.textPrimary};
+  background-color: ${p => p.theme.colors.backgroundDark};
+  color: ${p => p.theme.colors.textPrimary};
 `;
 
-const MainContent = styled.main`
-  display: flex;
-  flex: 1;
-`;
+const Body = styled.main`display: flex; flex: 1;`;
 
 const ContentArea = styled.div`
   flex: 1;
-  padding: 20px;
-  padding-top: 90px;
-  margin-left: ${(props) => (props.hasSidebar ? "240px" : "0")};
+  padding: 90px 28px 28px;
+  margin-left: ${p => (p.$hasSidebar ? "240px" : "0")};
+  transition: margin-left 0.3s ease;
+  min-height: 100vh;
 
-  @media (max-width: ${(props) => props.theme.breakpoints.tablet}) {
+  @media (max-width: ${p => p.theme.breakpoints.tablet}) {
     margin-left: 0;
-    padding-top: 90px;
   }
 `;
 
-// Protected Route Component
+/* ─── Protected route ────────────────────────────────────── */
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
     return (
-      <AppContainer>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            minHeight: "100vh",
-          }}
-        >
-          <p>Loading...</p>
-        </div>
-      </AppContainer>
+      <div style={{
+        display:"flex", alignItems:"center", justifyContent:"center",
+        minHeight:"100vh", backgroundColor:"#0b0e17",
+        color:"#94a3b8", fontFamily:"'DM Sans',sans-serif", fontSize:"16px",
+      }}>
+        Loading…
+      </div>
     );
   }
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return children;
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
 };
 
-// Main App Component
-const AppContent = () => {
+/* ─── Authenticated layout ───────────────────────────────── */
+const AuthLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { isAuthenticated } = useAuth();
 
-  const toggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen);
-  };
-
   return (
-    <Router>
-      <Routes>
-        {/* Public Route */}
-        <Route path="/login" element={<Login />} />
-
-        {/* Protected Routes */}
-        <Route
-          path="/*"
-          element={
-            <ProtectedRoute>
-              <AppContainer>
-                <Navbar toggleSidebar={toggleSidebar} />
-                <MainContent>
-                  <Sidebar isOpen={sidebarOpen} />
-                  <ContentArea hasSidebar={isAuthenticated && sidebarOpen}>
-                    <Routes>
-                      <Route path="/" element={<Dashboard />} />
-                      <Route path="/trading" element={<Trading />} />
-                      <Route path="/portfolio" element={<Portfolio />} />
-                      <Route path="/analytics" element={<Analytics />} />
-                    </Routes>
-                  </ContentArea>
-                </MainContent>
-                <Footer />
-              </AppContainer>
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
-    </Router>
+    <Shell>
+      <Navbar toggleSidebar={() => setSidebarOpen(o => !o)} />
+      <Body>
+        <Sidebar isOpen={sidebarOpen} />
+        <ContentArea $hasSidebar={isAuthenticated && sidebarOpen}>
+          <Routes>
+            <Route index              element={<Dashboard />} />
+            <Route path="trading"    element={<Trading />} />
+            <Route path="portfolio"  element={<Portfolio />} />
+            <Route path="analytics"  element={<Analytics />} />
+            <Route path="*"          element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </ContentArea>
+      </Body>
+      <Footer />
+    </Shell>
   );
 };
 
-function App() {
+/* ─── Root app content ───────────────────────────────────── */
+const AppContent = () => (
+  <Router>
+    <Routes>
+      {/* Public routes */}
+      <Route path="/"      element={<Home />} />
+      <Route path="/login" element={<Login />} />
+
+      {/* Protected routes — everything under /dashboard/* */}
+      <Route
+        path="/dashboard/*"
+        element={
+          <ProtectedRoute>
+            <AuthLayout />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  </Router>
+);
+
+export default function App() {
   return (
-    <ErrorBoundary>
-      <ThemeProvider theme={theme}>
+    <ThemeProvider theme={theme}>
+      <ErrorBoundary>
         <AuthProvider>
           <AppProvider>
             <AppContent />
           </AppProvider>
         </AuthProvider>
-      </ThemeProvider>
-    </ErrorBoundary>
+      </ErrorBoundary>
+    </ThemeProvider>
   );
 }
-
-export default App;
