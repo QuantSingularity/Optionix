@@ -1,45 +1,19 @@
-# Optionix / Code Directory
+# Optionix Code Directory
 
-This directory contains the core backend systems for the Optionix options trading and analytics platform. It houses three primary modules: AI/ML models for predictive analytics, a production-grade FastAPI backend for trading operations, and Ethereum smart contracts for decentralized options settlement.
-
----
+This directory contains the core backend systems for the Optionix options trading and analytics platform, organized into three modules: AI/ML models for predictive analytics, a production-grade FastAPI backend, and Ethereum smart contracts for decentralized options settlement.
 
 ## Table of Contents
 
 - [Overview](#overview)
 - [Directory Structure](#directory-structure)
 - [AI Models](#ai-models)
-  - [Quantitative Models](#quantitative-models)
-  - [Advanced Models](#advanced-models)
-  - [Training Scripts](#training-scripts)
-  - [Model Artifacts](#model-artifacts)
 - [Backend](#backend)
-  - [Architecture](#backend-architecture)
-  - [Application Layer](#application-layer)
-  - [API Endpoints](#api-endpoints)
-  - [Middleware](#middleware)
-  - [Services](#services)
-  - [Database](#database)
-  - [Testing](#backend-testing)
-  - [Docker Support](#docker-support)
 - [Blockchain](#blockchain)
-  - [Smart Contracts](#smart-contracts)
-  - [Contract Testing](#contract-testing)
-  - [Deployment](#deployment)
 - [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Environment Setup](#environment-setup)
-  - [Running the Backend](#running-the-backend)
-  - [Running Tests](#running-tests)
-  - [Docker Deployment](#docker-deployment)
 - [Technology Stack](#technology-stack)
 - [Security and Compliance](#security-and-compliance)
 
----
-
 ## Overview
-
-The `code/` directory powers the Optionix platform with three integrated modules:
 
 | Module        | Language              | Purpose                                                                   |
 | ------------- | --------------------- | ------------------------------------------------------------------------- |
@@ -47,9 +21,7 @@ The `code/` directory powers the Optionix platform with three integrated modules
 | `backend/`    | Python (FastAPI)      | REST API, authentication, trading engine, risk management, compliance     |
 | `blockchain/` | Solidity / JavaScript | Ethereum smart contracts for decentralized options and futures            |
 
-The AI models feed volatility predictions and pricing calculations into the backend API. The backend handles order execution, portfolio management, risk assessment, and regulatory compliance. The blockchain layer enables on-chain options contracts with transparent, immutable settlement.
-
----
+AI models feed volatility predictions and pricing data into the backend API. The backend handles order execution, portfolio management, risk assessment, and regulatory compliance. The blockchain layer enables on-chain options contracts with transparent, immutable settlement.
 
 ## Directory Structure
 
@@ -86,19 +58,15 @@ code/
 │   │   │   ├── risk.py                   # Risk management endpoints
 │   │   │   └── trading.py                # Trade execution endpoints
 │   │   ├── middleware/
-│   │   │   ├── __init__.py
 │   │   │   ├── audit_logging.py          # Request-level audit middleware
 │   │   │   ├── rate_limiting.py          # Rate limiting shim
 │   │   │   └── security.py              # Security headers and request hardening
 │   │   ├── services/
 │   │   │   ├── risk_management/
-│   │   │   │   ├── __init__.py
 │   │   │   │   └── risk_engine.py        # Advanced risk calculation engine
 │   │   │   ├── trade_execution/
-│   │   │   │   ├── __init__.py
 │   │   │   │   ├── circuit_breaker.py    # Circuit breaker pattern for execution
 │   │   │   │   └── execution_engine.py   # Order execution engine
-│   │   │   ├── __init__.py
 │   │   │   ├── blockchain_service.py     # Web3/Ethereum contract interaction
 │   │   │   ├── compliance_service.py     # KYC, AML, sanctions screening
 │   │   │   ├── financial_service.py      # Black-Scholes, VaR, PnL, fees
@@ -106,9 +74,7 @@ code/
 │   │   │   ├── model_service.py          # ML volatility prediction service
 │   │   │   ├── pricing_engine.py         # Greeks calculation and Monte Carlo
 │   │   │   └── risk_assessment.py        # VaR, ES, margin helpers
-│   │   ├── __init__.py
 │   │   ├── auth.py                       # AuthService, MFAService, RBACService
-│   │   ├── compliance.py                 # Additional compliance utilities
 │   │   ├── config.py                     # Pydantic settings (env-driven)
 │   │   ├── data_handler.py               # Data validation and quality
 │   │   ├── data_protection.py            # GDPR field encryption, consent logs
@@ -123,15 +89,13 @@ code/
 │   │   └── init                          # Database initialization scripts
 │   ├── scripts/
 │   │   ├── generate_dev_certs.sh         # Development certificate generation
-│   │   └── start_dev.sh                 # Development server startup
+│   │   └── start_dev.sh                  # Development server startup
 │   ├── tests/                            # 189+ tests across 12 test modules
 │   ├── Dockerfile
 │   ├── Makefile
-│   ├── README.md
-│   ├── __init__.py
-│   ├── alembic.ini                       # Alembic migration configuration
+│   ├── alembic.ini
 │   ├── docker-compose.yml
-│   ├── entrypoint.sh                     # Docker container entrypoint
+│   ├── entrypoint.sh
 │   ├── pyproject.toml
 │   ├── pytest.ini
 │   └── requirements.txt
@@ -143,99 +107,74 @@ code/
     ├── migrations/
     ├── tests/
     │   └── test_optionscontract.js       # Options contract JavaScript tests
-    └── truffle-config.js                # Truffle framework configuration
+    └── truffle-config.js                 # Truffle framework configuration
 ```
-
----
 
 ## AI Models
 
-The `ai_models/` module provides machine learning and quantitative finance capabilities for the Optionix platform.
+The `ai_models/` module provides machine learning and quantitative finance capabilities.
 
-### Quantitative Models
+### Quantitative Models (`ai_models/quantitative/`)
 
-Located in `ai_models/quantitative/`, these modules implement foundational options pricing theory:
+| File               | Description                                                                   |
+| ------------------ | ----------------------------------------------------------------------------- |
+| `black_scholes.py` | Black-Scholes closed-form pricing and Greeks (Delta, Gamma, Theta, Vega, Rho) |
+| `monte_carlo.py`   | Monte Carlo simulation engine supporting American and exotic options          |
 
-| File               | Description                                                                                    |
-| ------------------ | ---------------------------------------------------------------------------------------------- |
-| `black_scholes.py` | Black-Scholes closed-form options pricing, Greeks calculation (Delta, Gamma, Theta, Vega, Rho) |
-| `monte_carlo.py`   | Monte Carlo simulation engine for options pricing with support for American and exotic options |
+### Advanced Models (`ai_models/quantitative/advanced/`)
 
-### Advanced Models
+| File                       | Description                                          |
+| -------------------------- | ---------------------------------------------------- |
+| `calibration_engine.py`    | Fits model parameters to market-observed prices      |
+| `local_volatility.py`      | Local volatility surface models via Dupire's formula |
+| `stochastic_volatility.py` | Heston and SABR stochastic volatility models         |
+| `volatility_surface.py`    | Volatility surface construction and interpolation    |
 
-Located in `ai_models/quantitative/advanced/`, these modules implement sophisticated volatility modeling:
+### Training Scripts (`ai_models/training_scripts/`)
 
-| File                       | Description                                                                            |
-| -------------------------- | -------------------------------------------------------------------------------------- |
-| `calibration_engine.py`    | Calibration engine for fitting model parameters to market observed prices              |
-| `local_volatility.py`      | Local volatility surface models derived from implied volatility using Dupire's formula |
-| `stochastic_volatility.py` | Stochastic volatility models (Heston, SABR) for more accurate options pricing          |
-| `volatility_surface.py`    | Volatility surface construction and interpolation from market data                     |
-
-### Training Scripts
-
-Located in `ai_models/training_scripts/`:
-
-| File                        | Description                                                                      |
-| --------------------------- | -------------------------------------------------------------------------------- |
-| `data_preprocessing.py`     | Data cleaning, feature engineering, and normalization pipeline for market data   |
-| `train_volatility_model.py` | End-to-end training pipeline for volatility prediction models using scikit-learn |
+| File                        | Description                                                           |
+| --------------------------- | --------------------------------------------------------------------- |
+| `data_preprocessing.py`     | Data cleaning, feature engineering, and normalization for market data |
+| `train_volatility_model.py` | End-to-end scikit-learn training pipeline for volatility prediction   |
 
 ### Model Artifacts
 
-| File                             | Description                                                                         |
-| -------------------------------- | ----------------------------------------------------------------------------------- |
-| `create_model.py`                | Orchestrates model creation, combining quantitative and ML approaches               |
-| `generate_model_artifacts.py`    | Exports trained models, generates metadata, and creates reproducible model packages |
-| `volatility_model_metadata.json` | Model version tracking, hyperparameters, training metrics, and feature schemas      |
-
----
+| File                             | Description                                                              |
+| -------------------------------- | ------------------------------------------------------------------------ |
+| `create_model.py`                | Orchestrates model creation combining quantitative and ML approaches     |
+| `generate_model_artifacts.py`    | Exports trained models and generates reproducible model packages         |
+| `volatility_model_metadata.json` | Version tracking, hyperparameters, training metrics, and feature schemas |
 
 ## Backend
 
 The `backend/` module is a production-grade FastAPI application powering the Optionix trading platform.
 
-### Backend Architecture
+### Architecture
 
 The backend follows a layered architecture:
 
-1. **Entry Point** (`app/main.py`): FastAPI app factory with lifespan management, middleware mounting, and route registration
+1. **Entry Point** (`app/main.py`): App factory with lifespan management, middleware mounting, and route registration
 2. **API Layer** (`app/api/`): Route handlers organized by domain (auth, market, trading, portfolio, risk, compliance, analytics)
-3. **Middleware** (`app/middleware/`): Cross-cutting concerns including audit logging, rate limiting, and security headers
-4. **Services** (`app/services/`): Business logic layer with dedicated services for pricing, risk, compliance, execution, and blockchain
+3. **Middleware** (`app/middleware/`): Audit logging, rate limiting, and security headers
+4. **Services** (`app/services/`): Business logic for pricing, risk, compliance, execution, and blockchain
 5. **Core Modules** (`app/*.py`): Authentication, database, configuration, encryption, monitoring, and data protection
 
-### Application Layer
+### Core Application Modules
 
-#### `app/main.py`
-
-The FastAPI application factory that:
-
-- Configures the FastAPI app with lifespan events
-- Mounts all middleware components (CORS, security headers, audit logging, rate limiting)
-- Registers all API routers from the `api/` module
-- Initializes database connections and health check endpoints
-- Serves interactive API docs at `/docs`
-
-#### Core Application Modules
-
-| File                         | Purpose                                                                                                                                           |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app/auth.py`                | Authentication services: JWT token management, MFA/TOTP, RBAC with 9 roles (super_admin through viewer), account lockout, bcrypt password hashing |
-| `app/config.py`              | Pydantic settings management, environment-variable driven configuration                                                                           |
-| `app/database.py`            | SQLAlchemy engine and session factory, database connection management                                                                             |
-| `app/models.py`              | SQLAlchemy ORM models: User, Account, Trade, Position, and related entities                                                                       |
-| `app/schemas.py`             | Pydantic request/response validation schemas for all API endpoints                                                                                |
-| `app/security.py`            | AES-256 field encryption, API key management, input sanitization, security headers                                                                |
-| `app/compliance.py`          | KYC/AML validation utilities, sanctions screening integration                                                                                     |
-| `app/data_protection.py`     | GDPR compliance: field-level encryption, consent logging, data retention                                                                          |
-| `app/financial_standards.py` | Regulatory standard helpers for SOX, MiFID II, and Dodd-Frank compliance                                                                          |
-| `app/data_handler.py`        | Data validation, quality checks, and cleansing services                                                                                           |
-| `app/monitoring.py`          | Real-time system monitoring, alerting thresholds, Prometheus metrics                                                                              |
+| File                         | Purpose                                                                                                         |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `app/auth.py`                | JWT token management, MFA/TOTP, RBAC with 9 roles (super_admin through viewer), account lockout, bcrypt hashing |
+| `app/config.py`              | Pydantic settings driven by environment variables                                                               |
+| `app/database.py`            | SQLAlchemy engine and session factory                                                                           |
+| `app/models.py`              | ORM models: User, Account, Trade, Position, and related entities                                                |
+| `app/schemas.py`             | Pydantic request/response schemas for all API endpoints                                                         |
+| `app/security.py`            | AES-256 field encryption, API key management, input sanitization                                                |
+| `app/compliance.py`          | KYC/AML validation utilities and sanctions screening                                                            |
+| `app/data_protection.py`     | GDPR compliance: field-level encryption, consent logging, data retention                                        |
+| `app/financial_standards.py` | Regulatory helpers for SOX, MiFID II, and Dodd-Frank                                                            |
+| `app/monitoring.py`          | Real-time monitoring, alerting thresholds, Prometheus metrics                                                   |
 
 ### API Endpoints
-
-The API layer in `app/api/` provides the following endpoint groups:
 
 | File            | Path Prefix   | Description                                                      |
 | --------------- | ------------- | ---------------------------------------------------------------- |
@@ -244,20 +183,20 @@ The API layer in `app/api/` provides the following endpoint groups:
 | `compliance.py` | `/compliance` | KYC submission, AML checks, SAR filing, audit trail              |
 | `market.py`     | `/market`     | Options chains, market data, volatility feeds                    |
 | `portfolio.py`  | `/portfolio`  | Position tracking, P&L analysis, portfolio Greeks                |
-| `risk.py`       | `/risk`       | Value at Risk (VaR), Expected Shortfall, margin calculations     |
+| `risk.py`       | `/risk`       | VaR, Expected Shortfall, margin calculations                     |
 | `trading.py`    | `/trading`    | Order submission, multi-leg strategies, execution status         |
 
-Key endpoints include:
+Key endpoints:
 
-| Method | Path                 | Auth | Description                                      |
-| ------ | -------------------- | ---- | ------------------------------------------------ |
-| GET    | `/`                  | No   | Welcome and service status                       |
-| GET    | `/health`            | No   | Full service health check with dependency status |
-| POST   | `/auth/register`     | No   | Create new user account                          |
-| POST   | `/auth/login`        | No   | Authenticate and receive JWT pair                |
-| GET    | `/auth/me`           | Yes  | Current user profile                             |
-| POST   | `/auth/refresh`      | No   | Refresh access token                             |
-| POST   | `/market/volatility` | No   | AI-powered volatility prediction                 |
+| Method | Path                 | Auth | Description                       |
+| ------ | -------------------- | ---- | --------------------------------- |
+| GET    | `/`                  | No   | Welcome and service status        |
+| GET    | `/health`            | No   | Full service health check         |
+| POST   | `/auth/register`     | No   | Create new user account           |
+| POST   | `/auth/login`        | No   | Authenticate and receive JWT pair |
+| GET    | `/auth/me`           | Yes  | Current user profile              |
+| POST   | `/auth/refresh`      | No   | Refresh access token              |
+| POST   | `/market/volatility` | No   | AI-powered volatility prediction  |
 
 ### Middleware
 
@@ -269,40 +208,24 @@ Key endpoints include:
 
 ### Services
 
-The services layer encapsulates all business logic:
+| File                                           | Purpose                                                               |
+| ---------------------------------------------- | --------------------------------------------------------------------- |
+| `services/financial_service.py`                | Black-Scholes pricing, VaR, P&L tracking, fee computation             |
+| `services/compliance_service.py`               | KYC verification, AML monitoring, sanctions screening, SAR generation |
+| `services/model_service.py`                    | ML volatility inference with Parkinson statistical fallback           |
+| `services/pricing_engine.py`                   | Full Greeks calculation and Monte Carlo pricing                       |
+| `services/risk_assessment.py`                  | Portfolio VaR, Expected Shortfall, margin requirements                |
+| `services/health_service.py`                   | Health checks for all downstream services                             |
+| `services/blockchain_service.py`               | Web3/Ethereum smart contract integration (optional)                   |
+| `services/risk_management/risk_engine.py`      | Real-time portfolio stress testing and scenario analysis              |
+| `services/trade_execution/circuit_breaker.py`  | Circuit breaker preventing cascading failures during volatility       |
+| `services/trade_execution/execution_engine.py` | Order routing, execution strategy, fill tracking                      |
 
-#### Core Services
+### Database and Testing
 
-| File                             | Purpose                                                                                         |
-| -------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `services/financial_service.py`  | Black-Scholes pricing, VaR calculation, P&L tracking, fee computation                           |
-| `services/compliance_service.py` | KYC document verification, AML transaction monitoring, sanctions list screening, SAR generation |
-| `services/model_service.py`      | ML model inference for volatility prediction, with Parkinson statistical fallback               |
-| `services/pricing_engine.py`     | Full Greeks calculation (Delta, Gamma, Theta, Vega, Rho) and Monte Carlo pricing                |
-| `services/risk_assessment.py`    | Portfolio Value at Risk, Expected Shortfall, margin requirement calculations                    |
-| `services/health_service.py`     | Aggregated health checks for all downstream services and dependencies                           |
-| `services/blockchain_service.py` | Web3/Ethereum integration for smart contract interaction (optional)                             |
+PostgreSQL is used in production and SQLite for testing. Schema migrations are managed via Alembic.
 
-#### Risk Management
-
-| File                                      | Purpose                                                                            |
-| ----------------------------------------- | ---------------------------------------------------------------------------------- |
-| `services/risk_management/risk_engine.py` | Advanced risk engine with real-time portfolio stress testing and scenario analysis |
-
-#### Trade Execution
-
-| File                                           | Purpose                                                                        |
-| ---------------------------------------------- | ------------------------------------------------------------------------------ |
-| `services/trade_execution/circuit_breaker.py`  | Circuit breaker pattern preventing cascading failures during market volatility |
-| `services/trade_execution/execution_engine.py` | Order routing, execution strategy selection, fill tracking                     |
-
-### Database
-
-The `database/` directory contains initialization scripts for PostgreSQL (production) and SQLite (testing). Schema migrations are managed via Alembic using `alembic.ini`.
-
-### Backend Testing
-
-Located in `backend/tests/`, with 189+ tests across 12 test modules:
+The `backend/tests/` directory contains 189+ tests across 12 modules:
 
 | Test File                | Coverage Area                        |
 | ------------------------ | ------------------------------------ |
@@ -321,69 +244,55 @@ Located in `backend/tests/`, with 189+ tests across 12 test modules:
 
 ### Docker Support
 
-| File                 | Purpose                                             |
-| -------------------- | --------------------------------------------------- |
-| `Dockerfile`         | Multi-stage Python container build                  |
-| `docker-compose.yml` | Full stack orchestration with PostgreSQL and Redis  |
-| `entrypoint.sh`      | Container startup script with database migration    |
-| `Makefile`           | Shortcuts for build, test, run, and lint operations |
-
----
+| File                 | Purpose                                            |
+| -------------------- | -------------------------------------------------- |
+| `Dockerfile`         | Multi-stage Python container build                 |
+| `docker-compose.yml` | Full stack orchestration with PostgreSQL and Redis |
+| `entrypoint.sh`      | Container startup with database migration          |
+| `Makefile`           | Shortcuts for build, test, run, and lint           |
 
 ## Blockchain
 
-The `blockchain/` module implements decentralized options and futures contracts on the Ethereum network using the Truffle framework.
+The `blockchain/` module implements decentralized options and futures contracts on Ethereum using the Truffle framework.
 
-### Smart Contracts
+### Smart Contracts (`blockchain/contracts/`)
 
-Located in `blockchain/contracts/`:
+| File                       | Description                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------- |
+| `OptionsContract.sol`      | Core options contract: creation, exercise, expiration, and settlement                 |
+| `FuturesContract.sol`      | Futures contract: position opening, margin management, daily settlement, and delivery |
+| `FuturesContract.abi.json` | Compiled ABI for Web3 interaction from the backend                                    |
 
-| File                       | Description                                                                                                    |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `OptionsContract.sol`      | Core options smart contract: creation, exercise, expiration, and settlement of decentralized options positions |
-| `FuturesContract.sol`      | Futures smart contract: position opening, margin management, daily settlement, and delivery                    |
-| `FuturesContract.abi.json` | Compiled ABI for the futures contract, enabling Web3 interaction from the backend                              |
+### Testing and Deployment
 
-### Contract Testing
-
-| File                            | Description                                                                                   |
-| ------------------------------- | --------------------------------------------------------------------------------------------- |
-| `tests/test_optionscontract.js` | JavaScript test suite for the OptionsContract: creation, exercise, expiration, and edge cases |
-
-### Deployment
-
-| File                | Description                                                                                                                      |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `truffle-config.js` | Truffle framework configuration: network definitions (development, testnet, mainnet), compiler settings, and deployment accounts |
-| `migrations/`       | Truffle migration scripts for deploying contracts to target networks                                                             |
-
----
+| File                            | Description                                                                                     |
+| ------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `tests/test_optionscontract.js` | JavaScript tests for OptionsContract: creation, exercise, expiration, and edge cases            |
+| `truffle-config.js`             | Network definitions (development, testnet, mainnet), compiler settings, and deployment accounts |
+| `migrations/`                   | Truffle migration scripts for deploying contracts to target networks                            |
 
 ## Getting Started
 
 ### Prerequisites
 
 - Python 3.10+
-- pip and virtualenv
 - Node.js 18+ (for blockchain development)
 - Truffle Suite (for contract compilation and deployment)
-- Docker and Docker Compose (optional, for containerized deployment)
+- Docker and Docker Compose (optional)
 
 ### Environment Setup
 
-Create a Python virtual environment and install dependencies:
-
 ```bash
-# AI Models setup
-cd code/ai_models
-pip install -r ../backend/requirements.txt
-
 # Backend setup
 cd code/backend
 cp .env.example .env
-# Edit .env with your SECRET_KEY (>= 32 chars), ENCRYPTION_KEY (exactly 32 chars),
+# Set SECRET_KEY (>= 32 chars), ENCRYPTION_KEY (exactly 32 chars),
 # and DATABASE_URL (PostgreSQL in production, SQLite for testing)
 pip install -r requirements.txt
+
+# AI Models setup (shares backend requirements)
+cd code/ai_models
+pip install -r ../backend/requirements.txt
 
 # Blockchain setup
 cd code/blockchain
@@ -393,8 +302,6 @@ npm install
 
 ### Running the Backend
 
-Development mode with hot reload:
-
 ```bash
 cd code/backend
 make run
@@ -402,28 +309,21 @@ make run
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-API documentation is available at `http://localhost:8000/docs`.
+API docs are available at `http://localhost:8000/docs`.
 
 ### Running Tests
 
-Backend tests:
-
 ```bash
+# Backend (189+ tests)
 cd code/backend
-make test           # Run all 189+ tests
-make test-cov       # Run with HTML coverage report
-```
+make test
+make test-cov       # With HTML coverage report
 
-Blockchain tests:
-
-```bash
+# Blockchain
 cd code/blockchain
 truffle test
-```
 
-AI model tests:
-
-```bash
+# AI models
 cd code/ai_models
 python -m unittest discover
 ```
@@ -435,9 +335,7 @@ cd code/backend
 docker compose up --build
 ```
 
-This starts the full stack: FastAPI application, PostgreSQL database, and Redis cache.
-
----
+This starts the full stack: FastAPI application, PostgreSQL, and Redis.
 
 ## Technology Stack
 
@@ -478,11 +376,9 @@ This starts the full stack: FastAPI application, PostgreSQL database, and Redis 
 | Testing          | JavaScript / Truffle Test                |
 | Web3 Integration | Web3.py (via backend blockchain_service) |
 
----
-
 ## Security and Compliance
 
-The Optionix backend implements institutional-grade security measures:
+The Optionix backend implements institutional-grade security:
 
 - **Authentication**: JWT access and refresh tokens, bcrypt password hashing, TOTP-based MFA, account lockout after failed attempts
 - **Authorization**: 9-tier RBAC from super_admin to viewer with granular permissions
