@@ -1,286 +1,353 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Button, SegmentedButtons, TextInput } from "react-native-paper";
 import {
-  FlatList,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
-import {
-  ActivityIndicator,
-  Card,
-  Divider,
-  List,
-  Text as PaperText,
-  Paragraph,
-  Title,
-  useTheme,
-} from "react-native-paper";
-import { analyticsService } from "../services/api";
+  AlertBanner,
+  Grid2,
+  SectionCard,
+  StatLabel,
+  StatValue,
+} from "../components/UI";
+import analyticsService from "../services/analyticsService";
+import { extractErrorMessage } from "../services/api";
+import colors from "../theme";
+import { formatCurrency } from "../utils/format";
 
-const AnalyticsScreen = () => {
-  const [riskAssessment, setRiskAssessment] = useState(null);
-  const [volatilityAnalysis, setVolatilityAnalysis] = useState([]);
-  const [marketSentiment, setMarketSentiment] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(null);
-  const theme = useTheme();
+const TABS = [
+  { value: "price", label: "Pricer" },
+  { value: "iv", label: "Implied Vol" },
+  { value: "greeks", label: "Quick Greeks" },
+];
 
-  const getFallbackData = () => ({
-    risk: {
-      overallScore: 75,
-      factors: [
-        { name: "Market Risk", level: "High" },
-        { name: "Credit Risk", level: "Low" },
-        { name: "Liquidity Risk", level: "Medium" },
-      ],
-      recommendation: "Consider hedging strategies for market exposure.",
-    },
-    volatility: [
-      { date: "2025-04-01", impliedVol: 0.25, historicalVol: 0.22 },
-      { date: "2025-04-15", impliedVol: 0.28, historicalVol: 0.24 },
-      { date: "2025-04-29", impliedVol: 0.26, historicalVol: 0.25 },
-    ],
-    sentiment: {
-      index: 65,
-      status: "Greed",
-      summary:
-        "Market sentiment is leaning towards greed, potentially indicating overvaluation.",
-    },
+const ResultGrid = ({ items }) => (
+  <Grid2>
+    {items.map(([label, value]) => (
+      <View key={label} style={{ width: "50%", padding: 8 }}>
+        <StatLabel style={{ marginBottom: 4 }}>{label}</StatLabel>
+        <StatValue style={{ fontSize: 15 }}>{value}</StatValue>
+      </View>
+    ))}
+  </Grid2>
+);
+
+const OptionPricer = () => {
+  const [form, setForm] = useState({
+    spotPrice: "190",
+    strikePrice: "195",
+    timeToExpiry: "0.25",
+    volatility: "0.28",
+    riskFreeRate: "0.05",
+    optionType: "call",
   });
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const fetchAnalyticsData = async () => {
+  const update = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const submit = async () => {
+    setError("");
     setLoading(true);
-    setError(null);
-
     try {
-      const [riskData, volatilityData, sentimentData] = await Promise.all([
-        analyticsService.getRiskAssessment().catch(() => null),
-        analyticsService.getVolatilityAnalysis("AAPL").catch(() => null),
-        analyticsService.getMarketSentiment().catch(() => null),
-      ]);
-
-      if (riskData || volatilityData || sentimentData) {
-        setRiskAssessment(riskData);
-        setVolatilityAnalysis(volatilityData?.analysis || volatilityData || []);
-        setMarketSentiment(sentimentData);
-        if (!riskData || !volatilityData || !sentimentData) {
-          setError("Using demo data. Connect to backend for full analytics.");
-        }
-      } else {
-        const fallback = getFallbackData();
-        setRiskAssessment(fallback.risk);
-        setVolatilityAnalysis(fallback.volatility);
-        setMarketSentiment(fallback.sentiment);
-        setError("Using demo data. Connect to backend for real analytics.");
-      }
+      const data = await analyticsService.priceOption({
+        spotPrice: Number(form.spotPrice),
+        strikePrice: Number(form.strikePrice),
+        timeToExpiry: Number(form.timeToExpiry),
+        volatility: Number(form.volatility),
+        riskFreeRate: Number(form.riskFreeRate),
+        optionType: form.optionType,
+      });
+      setResult(data);
     } catch (err) {
-      console.error("Error fetching analytics data:", err);
-      const fallback = getFallbackData();
-      setRiskAssessment(fallback.risk);
-      setVolatilityAnalysis(fallback.volatility);
-      setMarketSentiment(fallback.sentiment);
-      setError("Using demo data. Please check your connection.");
+      setError(extractErrorMessage(err, "Pricing failed."));
     } finally {
       setLoading(false);
     }
   };
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchAnalyticsData();
-    setRefreshing(false);
-  }, [fetchAnalyticsData]);
+  return (
+    <SectionCard>
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
+      <TextInput
+        mode="outlined"
+        label="Spot price"
+        keyboardType="numeric"
+        value={form.spotPrice}
+        onChangeText={update("spotPrice")}
+        style={styles.input}
+      />
+      <TextInput
+        mode="outlined"
+        label="Strike price"
+        keyboardType="numeric"
+        value={form.strikePrice}
+        onChangeText={update("strikePrice")}
+        style={styles.input}
+      />
+      <TextInput
+        mode="outlined"
+        label="Time to expiry (yrs)"
+        keyboardType="numeric"
+        value={form.timeToExpiry}
+        onChangeText={update("timeToExpiry")}
+        style={styles.input}
+      />
+      <TextInput
+        mode="outlined"
+        label="Volatility (σ)"
+        keyboardType="numeric"
+        value={form.volatility}
+        onChangeText={update("volatility")}
+        style={styles.input}
+      />
+      <SegmentedButtons
+        value={form.optionType}
+        onValueChange={update("optionType")}
+        buttons={[
+          { value: "call", label: "Call" },
+          { value: "put", label: "Put" },
+        ]}
+        style={styles.segmented}
+      />
+      <Button
+        mode="contained"
+        onPress={submit}
+        loading={loading}
+        disabled={loading}
+        style={styles.submitBtn}
+      >
+        Calculate
+      </Button>
 
-  useEffect(() => {
-    fetchAnalyticsData();
-  }, [fetchAnalyticsData]);
-
-  const renderVolatilityItem = ({ item }) => (
-    <List.Item
-      title={item.date}
-      description={`Implied: ${item.impliedVol.toFixed(2)} | Historical: ${item.historicalVol.toFixed(2)}`}
-      titleStyle={styles.listItemTitle}
-    />
+      {result && (
+        <View style={{ marginTop: 16 }}>
+          <ResultGrid
+            items={[
+              ["Price", formatCurrency(result.price)],
+              ["Delta", result.delta.toFixed(4)],
+              ["Gamma", result.gamma.toFixed(4)],
+              ["Theta", result.theta.toFixed(4)],
+              ["Vega", result.vega.toFixed(4)],
+              ["Rho", result.rho != null ? result.rho.toFixed(4) : "—"],
+            ]}
+          />
+        </View>
+      )}
+    </SectionCard>
   );
+};
 
-  const getRiskLevelColor = (level) => {
-    switch (level.toLowerCase()) {
-      case "high":
-        return theme.colors.error;
-      case "medium":
-        return "#FFA500";
-      case "low":
-        return "#34C759";
-      default:
-        return theme.colors.text;
+const ImpliedVol = () => {
+  const [form, setForm] = useState({
+    marketPrice: "12.50",
+    spotPrice: "190",
+    strikePrice: "195",
+    timeToExpiry: "0.25",
+  });
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const update = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const submit = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const data = await analyticsService.impliedVolatility({
+        marketPrice: Number(form.marketPrice),
+        spotPrice: Number(form.spotPrice),
+        strikePrice: Number(form.strikePrice),
+        timeToExpiry: Number(form.timeToExpiry),
+      });
+      setResult(data);
+    } catch (err) {
+      setError(extractErrorMessage(err, "Couldn't solve for IV."));
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      <Title style={styles.title}>Analytics & Insights</Title>
-
-      {error && (
-        <Card style={[styles.card, styles.warningCard]}>
-          <Card.Content>
-            <Paragraph style={styles.warningText}>{error}</Paragraph>
-          </Card.Content>
-        </Card>
-      )}
-
-      <Card style={styles.card}>
-        <Card.Title title="Risk Assessment" />
-        <Card.Content>
-          {loading && !riskAssessment ? (
-            <ActivityIndicator
-              animating={true}
-              size="small"
-              style={styles.loadingIndicator}
-            />
-          ) : riskAssessment ? (
-            <View>
-              <Paragraph style={styles.metricText}>
-                Overall Score: {riskAssessment.overallScore}
-              </Paragraph>
-              {riskAssessment.factors.map((factor, index) => (
-                <View key={index} style={styles.factorContainer}>
-                  <Paragraph style={styles.factorText}>
-                    {factor.name}:{" "}
-                  </Paragraph>
-                  <PaperText
-                    style={[
-                      styles.factorLevel,
-                      { color: getRiskLevelColor(factor.level) },
-                    ]}
-                  >
-                    {factor.level}
-                  </PaperText>
-                </View>
-              ))}
-              <Paragraph style={styles.recommendationText}>
-                Recommendation: {riskAssessment.recommendation}
-              </Paragraph>
-            </View>
-          ) : (
-            <Paragraph>Could not load risk assessment.</Paragraph>
-          )}
-        </Card.Content>
-      </Card>
-
-      <Card style={styles.card}>
-        <Card.Title title="Volatility Analysis (AAPL - 1M)" />
-        <Card.Content>
-          <FlatList
-            data={volatilityAnalysis}
-            renderItem={renderVolatilityItem}
-            keyExtractor={(item) => item.date}
-            ItemSeparatorComponent={() => <Divider />}
-            ListEmptyComponent={
-              <Paragraph style={styles.emptyListText}>
-                No volatility data available.
-              </Paragraph>
-            }
-            scrollEnabled={false}
+    <SectionCard>
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
+      <TextInput
+        mode="outlined"
+        label="Market price"
+        keyboardType="numeric"
+        value={form.marketPrice}
+        onChangeText={update("marketPrice")}
+        style={styles.input}
+      />
+      <TextInput
+        mode="outlined"
+        label="Spot price"
+        keyboardType="numeric"
+        value={form.spotPrice}
+        onChangeText={update("spotPrice")}
+        style={styles.input}
+      />
+      <TextInput
+        mode="outlined"
+        label="Strike price"
+        keyboardType="numeric"
+        value={form.strikePrice}
+        onChangeText={update("strikePrice")}
+        style={styles.input}
+      />
+      <TextInput
+        mode="outlined"
+        label="Time to expiry (yrs)"
+        keyboardType="numeric"
+        value={form.timeToExpiry}
+        onChangeText={update("timeToExpiry")}
+        style={styles.input}
+      />
+      <Button
+        mode="contained"
+        onPress={submit}
+        loading={loading}
+        disabled={loading}
+        style={styles.submitBtn}
+      >
+        Solve for IV
+      </Button>
+      {result && (
+        <View style={{ marginTop: 16 }}>
+          <ResultGrid
+            items={[
+              ["Implied Vol", `${result.implied_volatility_pct.toFixed(2)}%`],
+            ]}
           />
-        </Card.Content>
-      </Card>
+        </View>
+      )}
+    </SectionCard>
+  );
+};
 
-      <Card style={styles.card}>
-        <Card.Title title="Market Sentiment" />
-        <Card.Content>
-          {loading && !marketSentiment ? (
-            <ActivityIndicator
-              animating={true}
-              size="small"
-              style={styles.loadingIndicator}
-            />
-          ) : marketSentiment ? (
-            <View>
-              <Paragraph style={styles.metricText}>
-                Index: {marketSentiment.index} ({marketSentiment.status})
-              </Paragraph>
-              <Paragraph style={styles.summaryText}>
-                {marketSentiment.summary}
-              </Paragraph>
-            </View>
-          ) : (
-            <Paragraph>Could not load market sentiment.</Paragraph>
-          )}
-        </Card.Content>
-      </Card>
+const QuickGreeks = () => {
+  const [form, setForm] = useState({
+    symbol: "AAPL",
+    spot: "190",
+    strike: "195",
+    expiryDays: "30",
+    volatility: "0.28",
+  });
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const update = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const submit = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const data = await analyticsService.quickGreeks(form.symbol, {
+        spot: Number(form.spot),
+        strike: Number(form.strike),
+        expiryDays: Number(form.expiryDays),
+        volatility: Number(form.volatility),
+      });
+      setResult(data);
+    } catch (err) {
+      setError(extractErrorMessage(err, "Couldn't fetch Greeks."));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <SectionCard>
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
+      <TextInput
+        mode="outlined"
+        label="Symbol"
+        autoCapitalize="characters"
+        value={form.symbol}
+        onChangeText={update("symbol")}
+        style={styles.input}
+      />
+      <TextInput
+        mode="outlined"
+        label="Spot"
+        keyboardType="numeric"
+        value={form.spot}
+        onChangeText={update("spot")}
+        style={styles.input}
+      />
+      <TextInput
+        mode="outlined"
+        label="Strike"
+        keyboardType="numeric"
+        value={form.strike}
+        onChangeText={update("strike")}
+        style={styles.input}
+      />
+      <TextInput
+        mode="outlined"
+        label="Expiry (days)"
+        keyboardType="numeric"
+        value={form.expiryDays}
+        onChangeText={update("expiryDays")}
+        style={styles.input}
+      />
+      <Button
+        mode="contained"
+        onPress={submit}
+        loading={loading}
+        disabled={loading}
+        style={styles.submitBtn}
+      >
+        Get Greeks
+      </Button>
+      {result && (
+        <View style={{ marginTop: 16 }}>
+          <ResultGrid
+            items={Object.entries(result.greeks).map(([k, v]) => [
+              k,
+              Number(v).toFixed(4),
+            ])}
+          />
+        </View>
+      )}
+    </SectionCard>
+  );
+};
+
+const AnalyticsScreen = () => {
+  const [tab, setTab] = useState("price");
+
+  return (
+    <ScrollView
+      style={{ backgroundColor: colors.background }}
+      contentContainerStyle={{ padding: 16 }}
+    >
+      <Text style={styles.title}>Analytics</Text>
+      <SegmentedButtons
+        value={tab}
+        onValueChange={setTab}
+        buttons={TABS}
+        style={styles.tabs}
+      />
+      {tab === "price" && <OptionPricer />}
+      {tab === "iv" && <ImpliedVol />}
+      {tab === "greeks" && <QuickGreeks />}
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 15,
-  },
   title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
+    color: colors.textPrimary,
+    fontSize: 20,
+    fontWeight: "800",
+    marginBottom: 14,
   },
-  card: {
-    marginBottom: 20,
-    elevation: 4,
-  },
-  warningCard: {
-    backgroundColor: "#FFF3CD",
-    borderLeftWidth: 4,
-    borderLeftColor: "#FFA500",
-  },
-  warningText: {
-    color: "#856404",
-  },
-  loadingIndicator: {
-    marginVertical: 20,
-  },
-  metricText: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 10,
-  },
-  factorContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 5,
-    marginLeft: 10,
-  },
-  factorText: {
-    fontSize: 15,
-  },
-  factorLevel: {
-    fontSize: 15,
-    fontWeight: "bold",
-    marginLeft: 5,
-  },
-  recommendationText: {
-    fontSize: 15,
-    fontStyle: "italic",
-    marginTop: 15,
-  },
-  summaryText: {
-    fontSize: 15,
-    marginTop: 5,
-  },
-  listItemTitle: {
-    fontSize: 16,
-  },
-  emptyListText: {
-    textAlign: "center",
-    marginVertical: 10,
-    fontStyle: "italic",
-  },
+  tabs: { marginBottom: 16 },
+  input: { marginBottom: 12, backgroundColor: colors.surfaceElevated },
+  segmented: { marginBottom: 14 },
+  submitBtn: { borderRadius: 10 },
 });
 
 export default AnalyticsScreen;

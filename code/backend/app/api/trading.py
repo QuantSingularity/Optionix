@@ -12,10 +12,16 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user
+from ..auth import get_current_active_user
 from ..database import get_db
 from ..models import Account, Position, Trade, User
-from ..schemas import PositionResponse, TradeRequest, TradeResponse
+from ..schemas import (
+    AccountCreate,
+    AccountResponse,
+    PositionResponse,
+    TradeRequest,
+    TradeResponse,
+)
 from ..services.financial_service import FinancialCalculationService
 from ..services.pricing_engine import PricingEngine
 from ..services.risk_assessment import RiskCalculator
@@ -49,12 +55,89 @@ def _get_account_or_404(account_id: int, user: User, db: Session) -> Account:
 
 
 @router.post(
+    "/accounts", response_model=AccountResponse, status_code=status.HTTP_201_CREATED
+)
+async def create_account(
+    account_req: AccountCreate,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Provision a new trading account for the authenticated user.
+
+    Each account gets an isolated balance, margin pool, and risk limit.
+    A user may hold multiple accounts (e.g. one demo, one live).
+    """
+    existing = (
+        db.query(Account)
+        .filter(Account.ethereum_address == account_req.ethereum_address)
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this address already exists",
+        )
+
+    initial_balance = account_req.initial_deposit or Decimal("0")
+
+    account = Account(
+        account_id=str(uuid4()),
+        user_id=current_user.id,
+        ethereum_address=account_req.ethereum_address,
+        account_type=account_req.account_type,
+        account_status="active",
+        balance_usd=initial_balance,
+        margin_available=initial_balance,
+        margin_used=Decimal("0"),
+        margin_requirement=Decimal("0"),
+        risk_limit=Decimal("100000"),
+        daily_loss_limit=Decimal("10000"),
+    )
+    db.add(account)
+    db.commit()
+    db.refresh(account)
+
+    logger.info(
+        "Account created: account_id=%s user=%s type=%s",
+        account.account_id,
+        current_user.user_id,
+        account.account_type,
+    )
+    return account
+
+
+@router.get("/accounts", response_model=List[AccountResponse])
+async def list_accounts(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """List all trading accounts belonging to the authenticated user."""
+    return (
+        db.query(Account)
+        .filter(Account.user_id == current_user.id)
+        .order_by(Account.created_at.desc())
+        .all()
+    )
+
+
+@router.get("/accounts/{account_id}", response_model=AccountResponse)
+async def get_account(
+    account_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Retrieve a single trading account by its numeric ID."""
+    return _get_account_or_404(account_id, current_user, db)
+
+
+@router.post(
     "/orders", response_model=TradeResponse, status_code=status.HTTP_201_CREATED
 )
 async def place_order(
     trade_req: TradeRequest,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -138,7 +221,7 @@ async def list_orders(
     order_status: Optional[str] = Query(None, alias="status"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """Retrieve the authenticated user's trade history with optional filters."""
@@ -156,7 +239,7 @@ async def list_orders(
 @router.get("/orders/{trade_id}", response_model=TradeResponse)
 async def get_order(
     trade_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """Retrieve a single order by its UUID."""
@@ -175,7 +258,7 @@ async def get_order(
 @router.delete("/orders/{trade_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def cancel_order(
     trade_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -206,11 +289,15 @@ async def cancel_order(
 async def list_positions(
     symbol: Optional[str] = Query(None, max_length=20),
     position_status: Optional[str] = Query(None, alias="status"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """List all open and closed positions for the authenticated user."""
-    q = db.query(Position).filter(Position.user_id == current_user.id)
+    q = (
+        db.query(Position)
+        .join(Account, Position.account_id == Account.id)
+        .filter(Account.user_id == current_user.id)
+    )
     if symbol:
         q = q.filter(Position.symbol == symbol.upper())
     if position_status:
@@ -221,15 +308,14 @@ async def list_positions(
 @router.get("/positions/{position_id}", response_model=PositionResponse)
 async def get_position(
     position_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """Fetch a single position by its UUID."""
     position = (
         db.query(Position)
-        .filter(
-            Position.position_id == position_id, Position.user_id == current_user.id
-        )
+        .join(Account, Position.account_id == Account.id)
+        .filter(Position.position_id == position_id, Account.user_id == current_user.id)
         .first()
     )
     if not position:
@@ -242,7 +328,7 @@ async def get_position(
 @router.get("/accounts/{account_id}/summary")
 async def account_summary(
     account_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """Return a margin and P&L summary for a trading account."""

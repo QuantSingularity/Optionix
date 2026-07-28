@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from ..auth import get_current_user
+from ..auth import get_current_active_user
 from ..models import User
 from ..services.pricing_engine import PricingEngine
 
@@ -127,7 +127,7 @@ def _implied_vol_bisection(
 @router.post("/price", response_model=OptionPricingResponse)
 async def price_option(
     req: OptionPricingRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Price a European option and compute its Greeks.
@@ -189,7 +189,7 @@ async def price_option(
 @router.post("/implied-volatility")
 async def compute_implied_volatility(
     req: ImpliedVolRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     """
     Back-solve for implied volatility given a market option price.
@@ -220,7 +220,7 @@ async def compute_implied_volatility(
 @router.post("/volatility-surface")
 async def compute_volatility_surface(
     req: VolatilitySurfaceRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     """
     Generate a volatility surface grid (strikes × expiries).
@@ -261,7 +261,7 @@ async def quick_greeks(
     expiry_days: int = Query(..., ge=1, le=3650),
     volatility: float = Query(0.20, gt=0, le=5.0),
     risk_free_rate: float = Query(0.05, ge=0, le=1.0),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     """
     Quick Greeks lookup for a single option via query parameters.

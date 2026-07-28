@@ -196,15 +196,24 @@ monitor_performance() {
   # Start monitoring
   END_TIME=$(($(date +%s) + DURATION))
 
-  while [ $(date +%s) -lt $END_TIME ]; do
+  while [ "$(date +%s)" -lt "$END_TIME" ]; do
     CURRENT_TIMESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
 
-    # CPU usage
-    CPU_STATS=$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100-$1}')
-    CPU_USER=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}')
-    CPU_SYSTEM=$(top -bn1 | grep "Cpu(s)" | awk '{print $4}')
-    CPU_IDLE=$(top -bn1 | grep "Cpu(s)" | awk '{print $8}')
-    CPU_IOWAIT=$(top -bn1 | grep "Cpu(s)" | awk '{print $10}')
+    # CPU usage. Extract via label-anchored regex rather than positional
+    # awk fields: `top` right-justifies these fixed-width percentage
+    # columns, and when a value reaches 3 integer digits (e.g. idle=100.0)
+    # the padding can swallow the separating space before it, which
+    # silently shifts every subsequent awk field index and previously
+    # produced garbage (e.g. capturing the literal label "id," instead of
+    # a number) roughly half the time on an idle system. Also sample `top`
+    # once instead of four separate times, since each independent
+    # invocation captures a different instant.
+    CPU_LINE=$(top -bn1 | grep "Cpu(s)")
+    CPU_USER=$(echo "$CPU_LINE" | grep -oP '[\d.]+(?=\s*us,)')
+    CPU_SYSTEM=$(echo "$CPU_LINE" | grep -oP '[\d.]+(?=\s*sy,)')
+    CPU_IDLE=$(echo "$CPU_LINE" | grep -oP '[\d.]+(?=\s*id,)')
+    CPU_IOWAIT=$(echo "$CPU_LINE" | grep -oP '[\d.]+(?=\s*wa,)')
+    CPU_STATS=$(echo "100 - $CPU_IDLE" | bc 2>/dev/null || awk -v idle="$CPU_IDLE" 'BEGIN{print 100-idle}')
     echo "$CURRENT_TIMESTAMP,$CPU_USER,$CPU_SYSTEM,$CPU_IDLE,$CPU_IOWAIT" >> "$CPU_LOG"
 
     # Memory usage
@@ -259,13 +268,16 @@ run_benchmarks() {
     return 1
   fi
 
-  # Define benchmark scenarios
+  # Define benchmark scenarios. These must be real, unauthenticated, GET
+  # endpoints that actually exist on the backend — most Optionix routes
+  # (trading/portfolio/analytics/risk/compliance) require a Bearer token and
+  # aren't suitable for a plain `ab` GET benchmark.
   declare -A ENDPOINTS
   ENDPOINTS=(
     ["root"]="/"
-    ["options"]="/api/options"
-    ["volatility"]="/api/volatility"
-    ["strategies"]="/api/strategies"
+    ["health"]="/health"
+    ["docs"]="/docs"
+    ["openapi"]="/openapi.json"
   )
 
   # Run benchmarks for each endpoint
@@ -322,13 +334,14 @@ run_load_tests() {
     return 1
   fi
 
-  # Define load test scenarios
+  # Define load test scenarios (same real, unauthenticated endpoints as the
+  # benchmark scenarios above)
   declare -A ENDPOINTS
   ENDPOINTS=(
     ["root"]="/"
-    ["options"]="/api/options"
-    ["volatility"]="/api/volatility"
-    ["strategies"]="/api/strategies"
+    ["health"]="/health"
+    ["docs"]="/docs"
+    ["openapi"]="/openapi.json"
   )
 
   # Run load tests for each endpoint
@@ -345,9 +358,15 @@ run_load_tests() {
     REQUESTS=$(echo "$AB_OUTPUT" | grep "Complete requests:" | awk '{print $3}')
     FAILED=$(echo "$AB_OUTPUT" | grep "Failed requests:" | awk '{print $3}')
     RPS=$(echo "$AB_OUTPUT" | grep "Requests per second:" | awk '{print $4}')
-    MIN_LATENCY=$(echo "$AB_OUTPUT" | grep "min" | awk '{print $2}')
-    MEAN_LATENCY=$(echo "$AB_OUTPUT" | grep "mean" | awk '{print $4}')
-    MAX_LATENCY=$(echo "$AB_OUTPUT" | grep "max" | awk '{print $6}')
+    # The "min"/"mean"/"max" column header row of ab's "Connection Times"
+    # section literally contains the words "min", "mean[+/-sd]" and "max",
+    # so a naive `grep "min"` etc. matches that HEADER line instead of the
+    # "Total:" data row and extracts garbage (e.g. the literal text
+    # "mean[+/-sd]") instead of a number. Extract from the Total: line only.
+    AB_TOTAL_LINE=$(echo "$AB_OUTPUT" | grep "^Total:")
+    MIN_LATENCY=$(echo "$AB_TOTAL_LINE" | awk '{print $2}')
+    MEAN_LATENCY=$(echo "$AB_TOTAL_LINE" | awk '{print $3}')
+    MAX_LATENCY=$(echo "$AB_TOTAL_LINE" | awk '{print $6}')
     PERCENTILE_50=$(echo "$AB_OUTPUT" | grep "50%" | awk '{print $2}')
     PERCENTILE_90=$(echo "$AB_OUTPUT" | grep "90%" | awk '{print $2}')
     PERCENTILE_99=$(echo "$AB_OUTPUT" | grep "99%" | awk '{print $2}')

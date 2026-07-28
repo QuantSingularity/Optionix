@@ -24,6 +24,8 @@ from jose import jwt
 from sqlalchemy.orm import Session
 
 from .config import settings
+from .database import get_db
+from .models import User
 
 logger = logging.getLogger(__name__)
 
@@ -350,6 +352,32 @@ async def get_current_verified_user(
     current_user: dict = Depends(get_current_user),
 ) -> dict:
     return current_user
+
+
+async def get_current_active_user(
+    token_payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> "User":
+    """
+    Resolve the JWT payload returned by `get_current_user` into the full
+    `User` ORM row.
+
+    Routers that need real model attributes (`.id`, `.kyc_status`,
+    `.risk_score`, ...) rather than just the raw token claims should depend
+    on this instead of `get_current_user` directly.
+    """
+    user = db.query(User).filter(User.user_id == token_payload.get("sub")).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled"
+        )
+    return user
 
 
 def require_permission(permission: Permission) -> Any:

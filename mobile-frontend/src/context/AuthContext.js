@@ -1,142 +1,129 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createContext, useContext, useEffect, useState } from "react";
-import { authService } from "../services/api";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import authService from "../services/authService";
+import {
+  extractErrorMessage,
+  setSessionExpiredHandler,
+  tokenStorage,
+} from "../services/api";
 
-const AuthContext = createContext({});
+const AuthContext = createContext(null);
 
-export const AuthProvider = ({ children }) => {
+export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [authError, setAuthError] = useState(null);
 
-  // Check for existing auth token on app load
-  useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
-
-  const checkAuth = async () => {
+  const loadProfile = useCallback(async () => {
     try {
-      const token = await AsyncStorage.getItem("authToken");
-      if (token) {
-        // Verify token and get user profile
-        const userProfile = await authService.getUserProfile();
-        setUser(userProfile);
-      }
-    } catch (err) {
-      console.error("Auth check failed:", err);
-      // Clear invalid token
-      await AsyncStorage.removeItem("authToken");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const login = async (email, password) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await authService.login(email, password);
-
-      // Store token
-      if (response.token || response.access_token) {
-        await AsyncStorage.setItem(
-          "authToken",
-          response.token || response.access_token,
-        );
-      }
-
-      // Get user profile
-      const userProfile = await authService.getUserProfile();
-      setUser(userProfile);
-
-      return { success: true };
-    } catch (err) {
-      const errorMessage =
-        err.response?.data?.message ||
-        err.response?.data?.detail ||
-        "Login failed. Please check your credentials.";
-      setError(errorMessage);
-      throw new Error(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const register = async (userData) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await authService.register(userData);
-
-      // Some APIs return token on registration, others require login
-      if (response.token || response.access_token) {
-        await AsyncStorage.setItem(
-          "authToken",
-          response.token || response.access_token,
-        );
-        const userProfile = await authService.getUserProfile();
-        setUser(userProfile);
-      }
-
-      return {
-        success: true,
-        requiresLogin: !(response.token || response.access_token),
-      };
-    } catch (err) {
-      const errorMessage =
-        err.response?.data?.message ||
-        err.response?.data?.detail ||
-        "Registration failed. Please try again.";
-      setError(errorMessage);
-      throw new Error(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const logout = async () => {
-    try {
-      setLoading(true);
-      await authService.logout();
-    } catch (err) {
-      console.error("Logout API call failed:", err);
-      // Continue with local logout even if API call fails
-    } finally {
-      await AsyncStorage.removeItem("authToken");
+      const profile = await authService.me();
+      setUser(profile);
+      return profile;
+    } catch {
+      await tokenStorage.clear();
       setUser(null);
-      setError(null);
-      setLoading(false);
+      return null;
     }
-  };
+  }, []);
 
-  const clearError = () => {
-    setError(null);
-  };
+  useEffect(() => {
+    const bootstrap = async () => {
+      const token = await tokenStorage.getAccessToken();
+      if (token) {
+        await loadProfile();
+      }
+      setIsLoading(false);
+    };
+    bootstrap();
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        error,
-        login,
-        register,
-        logout,
-        clearError,
-        isAuthenticated: !!user,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+    setSessionExpiredHandler(() => {
+      setUser(null);
+      setAuthError("Your session expired. Please sign in again.");
+    });
+    return () => setSessionExpiredHandler(null);
+  }, [loadProfile]);
+
+  const login = useCallback(
+    async ({ email, password, mfaToken, rememberMe }) => {
+      setAuthError(null);
+      try {
+        const tokenData = await authService.login({
+          email,
+          password,
+          mfaToken,
+          rememberMe,
+        });
+        await tokenStorage.setTokens(
+          tokenData.access_token,
+          tokenData.refresh_token,
+        );
+        return await loadProfile();
+      } catch (err) {
+        const message = extractErrorMessage(err, "Unable to sign in.");
+        setAuthError(message);
+        throw new Error(message);
+      }
+    },
+    [loadProfile],
   );
-};
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
+  const register = useCallback(
+    async ({ email, password, fullName, marketingConsent }) => {
+      setAuthError(null);
+      try {
+        await authService.register({
+          email,
+          password,
+          fullName,
+          marketingConsent,
+        });
+        return await login({ email, password });
+      } catch (err) {
+        const message = extractErrorMessage(err, "Unable to create account.");
+        setAuthError(message);
+        throw new Error(message);
+      }
+    },
+    [login],
+  );
+
+  const logout = useCallback(async () => {
+    await tokenStorage.clear();
+    setUser(null);
+  }, []);
+
+  const refreshProfile = useCallback(() => loadProfile(), [loadProfile]);
+
+  const value = useMemo(
+    () => ({
+      user,
+      isAuthenticated: !!user,
+      isLoading,
+      authError,
+      setAuthError,
+      login,
+      register,
+      logout,
+      refreshProfile,
+    }),
+    [user, isLoading, authError, login, register, logout, refreshProfile],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
-  return context;
-};
+  return ctx;
+}
 
 export default AuthContext;

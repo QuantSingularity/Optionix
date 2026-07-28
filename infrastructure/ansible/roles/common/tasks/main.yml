@@ -1,5 +1,15 @@
 ---
 # Common security hardening tasks for all servers
+#
+# NOTE: this role targets Debian/Ubuntu (apt package names like "ufw" and
+# "unattended-upgrades", /etc/apt/ paths). infrastructure/terraform's
+# compute module provisions Amazon Linux 2 (yum-based), and the real
+# inventory/hosts.yml uses ansible_user: ec2-user (the Amazon Linux
+# convention) - if this role is run against the Terraform-provisioned
+# instances as-is, the apt-specific tasks below will fail. Either point
+# this role at Debian/Ubuntu hosts, or adapt the package names/paths for
+# Amazon Linux (yum-cron instead of unattended-upgrades, firewalld or
+# direct iptables instead of ufw, etc.) before running against EC2.
 - name: Update all packages to latest version
   package:
     name: "*"

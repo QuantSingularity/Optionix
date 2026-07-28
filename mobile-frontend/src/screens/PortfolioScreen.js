@@ -1,282 +1,250 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  FlatList,
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Text,
   View,
 } from "react-native";
+import { ActivityIndicator } from "react-native-paper";
+import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
+import CreateAccountPrompt from "../components/CreateAccountPrompt";
 import {
-  ActivityIndicator,
-  Card,
-  Divider,
-  List,
-  Text as PaperText,
-  Paragraph,
-  Title,
-  useTheme,
-} from "react-native-paper";
-import { portfolioService } from "../services/api";
+  AlertBanner,
+  CardHeaderRow,
+  CardTitle,
+  EmptyState,
+  Grid2,
+  Screen,
+  SectionCard,
+  SimpleBarRow,
+  StatLabel,
+  StatValue,
+} from "../components/UI";
+import { extractErrorMessage } from "../services/api";
+import portfolioService from "../services/portfolioService";
+import tradingService from "../services/tradingService";
+import colors, { CHART_COLORS } from "../theme";
+import { formatCurrency } from "../utils/format";
 
 const PortfolioScreen = () => {
-  const [portfolioSummary, setPortfolioSummary] = useState(null);
-  const [positions, setPositions] = useState([]);
-  const [performance, setPerformance] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(null);
-  const [_usingFallbackData, setUsingFallbackData] = useState(false);
-  const theme = useTheme();
+  const [error, setError] = useState("");
+  const [hasAccount, setHasAccount] = useState(true);
 
-  const getFallbackData = () => ({
-    summary: {
-      totalValue: 150000.0,
-      dayChange: "+1.5%",
-      cashBalance: 25000.0,
-    },
-    positions: [
-      { symbol: "AAPL", quantity: 100, value: 17550.0, type: "Stock" },
-      { symbol: "GOOGL", quantity: 10, value: 28000.0, type: "Stock" },
-      { symbol: "BTC-USD", quantity: 0.5, value: 30000.0, type: "Crypto" },
-      { symbol: "AAPL 251219C180", quantity: 5, value: 2400.0, type: "Option" },
-    ],
-    performance: [
-      { date: "2025-04-01", value: 145000 },
-      { date: "2025-04-15", value: 148000 },
-      { date: "2025-04-29", value: 150000 },
-    ],
-  });
+  const [overview, setOverview] = useState(null);
+  const [allocation, setAllocation] = useState(null);
+  const [performance, setPerformance] = useState(null);
+  const [riskMetrics, setRiskMetrics] = useState(null);
+  const [greeks, setGreeks] = useState(null);
 
-  const fetchPortfolioData = async () => {
-    setLoading(true);
-    setError(null);
-
+  const loadAll = useCallback(async () => {
+    setError("");
     try {
-      const [summaryData, positionsData, performanceData] = await Promise.all([
-        portfolioService.getPortfolioSummary().catch(() => null),
-        portfolioService.getPositions().catch(() => null),
-        portfolioService.getPerformanceHistory().catch(() => null),
-      ]);
-
-      if (summaryData && positionsData) {
-        setPortfolioSummary(summaryData);
-        setPositions(positionsData.positions || positionsData);
-        setPerformance(performanceData?.performance || performanceData || []);
-        setUsingFallbackData(false);
-      } else {
-        const fallback = getFallbackData();
-        setPortfolioSummary(fallback.summary);
-        setPositions(fallback.positions);
-        setPerformance(fallback.performance);
-        setUsingFallbackData(true);
-        setError("Using demo data. Connect to backend for your portfolio.");
+      const accounts = await tradingService.listAccounts();
+      if (accounts.length === 0) {
+        setHasAccount(false);
+        return;
       }
+      setHasAccount(true);
+      const [ov, alloc, perf, risk, gk] = await Promise.all([
+        portfolioService.getOverview(),
+        portfolioService.getAllocation(),
+        portfolioService.getPerformance(30),
+        portfolioService.getRiskMetrics(),
+        portfolioService.getGreeksSummary(),
+      ]);
+      setOverview(ov);
+      setAllocation(alloc);
+      setPerformance(perf);
+      setRiskMetrics(risk);
+      setGreeks(gk);
     } catch (err) {
-      console.error("Error fetching portfolio data:", err);
-      const fallback = getFallbackData();
-      setPortfolioSummary(fallback.summary);
-      setPositions(fallback.positions);
-      setPerformance(fallback.performance);
-      setUsingFallbackData(true);
-      setError("Using demo data. Please check your connection.");
-    } finally {
-      setLoading(false);
+      setError(extractErrorMessage(err, "Couldn't load portfolio data."));
     }
-  };
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchPortfolioData();
-    setRefreshing(false);
-  }, [fetchPortfolioData]);
+  }, []);
 
   useEffect(() => {
-    fetchPortfolioData();
-  }, [fetchPortfolioData]);
+    (async () => {
+      setIsLoading(true);
+      await loadAll();
+      setIsLoading(false);
+    })();
+  }, [loadAll]);
 
-  const renderPositionItem = ({ item }) => (
-    <List.Item
-      title={`${item.symbol} (${item.type})`}
-      description={`Qty: ${item.quantity}`}
-      right={() => (
-        <PaperText style={styles.listItemValue}>
-          ${item.value.toFixed(2)}
-        </PaperText>
-      )}
-      titleStyle={styles.listItemTitle}
-    />
-  );
-
-  const renderPerformanceItem = ({ item }) => (
-    <List.Item
-      title={item.date}
-      right={() => (
-        <PaperText style={styles.listItemValue}>
-          ${item.value.toFixed(2)}
-        </PaperText>
-      )}
-      titleStyle={styles.listItemTitle}
-    />
-  );
-
-  const renderChange = (change) => {
-    const changeStr =
-      typeof change === "string"
-        ? change
-        : `${change > 0 ? "+" : ""}${change}%`;
-    const isPositive = changeStr.startsWith("+");
-    return (
-      <PaperText
-        style={isPositive ? styles.positiveChange : styles.negativeChange}
-      >
-        {changeStr}
-      </PaperText>
-    );
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadAll();
+    setRefreshing(false);
   };
+
+  if (isLoading) {
+    return (
+      <Screen style={styles.centered}>
+        <ActivityIndicator color={colors.primary} size="large" />
+      </Screen>
+    );
+  }
+
+  if (!hasAccount) {
+    return (
+      <ScrollView
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={{ padding: 16 }}
+      >
+        <CreateAccountPrompt onCreated={loadAll} />
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      style={{ backgroundColor: colors.background }}
+      contentContainerStyle={{ padding: 16 }}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={colors.primary}
+        />
       }
     >
-      <Title style={styles.title}>Portfolio Management</Title>
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
 
-      {error && (
-        <Card style={[styles.card, styles.warningCard]}>
-          <Card.Content>
-            <Paragraph style={styles.warningText}>{error}</Paragraph>
-          </Card.Content>
-        </Card>
-      )}
+      <Grid2>
+        <View style={{ width: "50%", padding: 6 }}>
+          <View style={styles.miniStat}>
+            <StatLabel style={{ marginBottom: 4 }}>Total Equity</StatLabel>
+            <StatValue style={{ fontSize: 16 }}>
+              {formatCurrency(overview?.total_equity || 0)}
+            </StatValue>
+          </View>
+        </View>
+        <View style={{ width: "50%", padding: 6 }}>
+          <View style={styles.miniStat}>
+            <StatLabel style={{ marginBottom: 4 }}>VaR (95%)</StatLabel>
+            <StatValue style={{ fontSize: 16 }}>
+              {formatCurrency(riskMetrics?.var_95 || 0)}
+            </StatValue>
+          </View>
+        </View>
+      </Grid2>
 
-      <Card style={styles.card}>
-        <Card.Title title="Summary" />
-        <Card.Content>
-          {loading && !portfolioSummary ? (
-            <ActivityIndicator
-              animating={true}
-              size="small"
-              style={styles.loadingIndicator}
+      <SectionCard>
+        <CardHeaderRow>
+          <CardTitle>Allocation</CardTitle>
+        </CardHeaderRow>
+        {allocation?.allocations?.length > 0 ? (
+          allocation.allocations.map((a, i) => (
+            <SimpleBarRow
+              key={a.symbol}
+              label={a.symbol}
+              valueLabel={`${formatCurrency(a.exposure)}`}
+              pct={Number(a.weight_pct)}
+              color={CHART_COLORS[i % CHART_COLORS.length]}
             />
-          ) : portfolioSummary ? (
-            <View>
-              <Paragraph style={styles.summaryText}>
-                Total Value: $
-                {portfolioSummary.totalValue?.toFixed(2) || "0.00"}
-              </Paragraph>
-              <View style={styles.summaryChangeContainer}>
-                <Paragraph style={styles.summaryText}>Day's Change: </Paragraph>
-                {renderChange(portfolioSummary.dayChange || 0)}
+          ))
+        ) : (
+          <EmptyState
+            icon={
+              <MaterialCommunityIcons
+                name="chart-donut"
+                size={26}
+                color={colors.borderAccent}
+              />
+            }
+            title="No open positions"
+          />
+        )}
+      </SectionCard>
+
+      <SectionCard>
+        <CardHeaderRow>
+          <CardTitle>Net Greeks</CardTitle>
+        </CardHeaderRow>
+        {greeks && Number(greeks.open_positions) > 0 ? (
+          <Grid2>
+            {Object.entries(greeks.net_greeks).map(([k, v]) => (
+              <View key={k} style={{ width: "33.33%", padding: 6 }}>
+                <StatLabel style={{ marginBottom: 4 }}>{k}</StatLabel>
+                <StatValue style={{ fontSize: 14 }}>
+                  {Number(v).toFixed(4)}
+                </StatValue>
               </View>
-              <Paragraph style={styles.summaryText}>
-                Cash Balance: $
-                {portfolioSummary.cashBalance?.toFixed(2) || "0.00"}
-              </Paragraph>
+            ))}
+          </Grid2>
+        ) : (
+          <EmptyState
+            icon={
+              <MaterialCommunityIcons
+                name="function-variant"
+                size={26}
+                color={colors.borderAccent}
+              />
+            }
+            title="No Greeks yet"
+          />
+        )}
+      </SectionCard>
+
+      <SectionCard>
+        <CardHeaderRow>
+          <CardTitle>30-Day Performance</CardTitle>
+        </CardHeaderRow>
+        {performance && performance.total_trades > 0 ? (
+          <Grid2>
+            <View style={{ width: "50%", padding: 6 }}>
+              <StatLabel style={{ marginBottom: 4 }}>Trades</StatLabel>
+              <StatValue style={{ fontSize: 15 }}>
+                {performance.total_trades}
+              </StatValue>
             </View>
-          ) : (
-            <Paragraph>Could not load summary.</Paragraph>
-          )}
-        </Card.Content>
-      </Card>
-
-      <Card style={styles.card}>
-        <Card.Title title="Positions" />
-        <Card.Content>
-          <FlatList
-            data={positions}
-            renderItem={renderPositionItem}
-            keyExtractor={(item, index) => `${item.symbol}-${index}`}
-            ItemSeparatorComponent={() => <Divider />}
-            ListEmptyComponent={
-              <Paragraph style={styles.emptyListText}>
-                No positions found.
-              </Paragraph>
+            <View style={{ width: "50%", padding: 6 }}>
+              <StatLabel style={{ marginBottom: 4 }}>Net P&L</StatLabel>
+              <StatValue style={{ fontSize: 15 }}>
+                {formatCurrency(performance.total_pnl)}
+              </StatValue>
+            </View>
+          </Grid2>
+        ) : (
+          <EmptyState
+            icon={
+              <MaterialCommunityIcons
+                name="chart-timeline-variant"
+                size={26}
+                color={colors.borderAccent}
+              />
             }
-            scrollEnabled={false}
+            title="No trades in this window"
           />
-        </Card.Content>
-      </Card>
+        )}
+      </SectionCard>
 
-      <Card style={styles.card}>
-        <Card.Title title="Performance (Last Month)" />
-        <Card.Content>
-          <FlatList
-            data={performance}
-            renderItem={renderPerformanceItem}
-            keyExtractor={(item) => item.date}
-            ItemSeparatorComponent={() => <Divider />}
-            ListEmptyComponent={
-              <Paragraph style={styles.emptyListText}>
-                No performance data available.
-              </Paragraph>
-            }
-            scrollEnabled={false}
-          />
-        </Card.Content>
-      </Card>
+      {riskMetrics?.methodology && (
+        <Text style={styles.footnote}>
+          Risk figures computed via {riskMetrics.methodology}.
+        </Text>
+      )}
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 15,
+  centered: { justifyContent: "center", alignItems: "center" },
+  miniStat: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    padding: 14,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 20,
+  footnote: {
+    color: colors.textMuted,
+    fontSize: 11.5,
     textAlign: "center",
-  },
-  card: {
+    marginTop: 4,
     marginBottom: 20,
-    elevation: 4,
-  },
-  warningCard: {
-    backgroundColor: "#FFF3CD",
-    borderLeftWidth: 4,
-    borderLeftColor: "#FFA500",
-  },
-  warningText: {
-    color: "#856404",
-  },
-  loadingIndicator: {
-    marginVertical: 20,
-  },
-  summaryText: {
-    fontSize: 16,
-    marginBottom: 8,
-  },
-  summaryChangeContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  listItemTitle: {
-    fontSize: 16,
-  },
-  listItemValue: {
-    fontSize: 16,
-    fontWeight: "bold",
-    alignSelf: "center",
-  },
-  positiveChange: {
-    color: "#34C759",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  negativeChange: {
-    color: "#FF3B30",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  emptyListText: {
-    textAlign: "center",
-    marginVertical: 10,
-    fontStyle: "italic",
   },
 });
 

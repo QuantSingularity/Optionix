@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user
+from ..auth import get_current_active_user
 from ..database import get_db
 from ..models import Account, Position, User
 from ..services.pricing_engine import PricingEngine
@@ -24,6 +24,16 @@ router = APIRouter(prefix="/risk", tags=["Risk Management"])
 
 _risk_calc = RiskCalculator()
 _pricing = PricingEngine()
+
+
+def _user_positions_query(user: User, db: Session):
+    """Positions belong to an Account, so scope to the user via a join."""
+    return (
+        db.query(Position)
+        .join(Account, Position.account_id == Account.id)
+        .filter(Account.user_id == user.id)
+    )
+
 
 # ── Request schemas ────────────────────────────────────────────────────────
 
@@ -118,7 +128,7 @@ _SCENARIO_SHOCKS: Dict[str, Dict[str, float]] = {
 @router.post("/var")
 async def calculate_var(
     req: VaRRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
@@ -128,9 +138,7 @@ async def calculate_var(
     Returns VaR and CVaR at each requested confidence level.
     """
     positions = (
-        db.query(Position)
-        .filter(Position.user_id == current_user.id, Position.status == "open")
-        .all()
+        _user_positions_query(current_user, db).filter(Position.status == "open").all()
     )
 
     portfolio_value = (
@@ -186,7 +194,7 @@ async def calculate_var(
 @router.post("/stress-test")
 async def run_stress_test(
     req: StressTestRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
@@ -248,7 +256,7 @@ async def run_stress_test(
 
 @router.get("/greeks/portfolio")
 async def portfolio_greeks(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
@@ -258,9 +266,7 @@ async def portfolio_greeks(
     conventions (long = positive, short = negative).
     """
     positions = (
-        db.query(Position)
-        .filter(Position.user_id == current_user.id, Position.status == "open")
-        .all()
+        _user_positions_query(current_user, db).filter(Position.status == "open").all()
     )
     totals = {g: Decimal("0") for g in ("delta", "gamma", "theta", "vega", "rho")}
     position_greeks = []
@@ -296,7 +302,7 @@ async def greeks_heatmap(
     strike: float = Query(..., gt=0),
     expiry_days: int = Query(..., ge=1, le=3650),
     base_vol: float = Query(0.20, gt=0, le=5.0),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     """
     Generate a Delta / Gamma heatmap over a spot × volatility grid.
@@ -341,7 +347,7 @@ async def greeks_heatmap(
 
 @router.get("/limits")
 async def get_risk_limits(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Return current risk limits and utilisation for the authenticated user."""
@@ -374,7 +380,7 @@ async def get_risk_limits(
 
 @router.get("/circuit-breakers")
 async def circuit_breaker_status(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     """
     Return the status of all trading circuit breakers.

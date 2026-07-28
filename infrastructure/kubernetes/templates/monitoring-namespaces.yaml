@@ -1,0 +1,39 @@
+# Namespaces for the monitoring and logging stacks.
+#
+# monitoring-stack.yaml deploys Prometheus/Grafana/node-exporter into
+# "monitoring" and Elasticsearch into "logging", but neither namespace is
+# created anywhere else in this manifest set (only "optionix" is, via
+# pod-security-policy.yaml) - applying monitoring-stack.yaml without this
+# file fails immediately with "namespaces ... not found".
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring
+    # node-exporter (below) requires hostNetwork, hostPID, and hostPath
+    # access to collect node-level metrics - all of which "baseline" and
+    # "restricted" explicitly forbid, so this namespace needs "privileged"
+    # enforcement. Prometheus and Grafana are still individually hardened
+    # via their own pod-level securityContext (runAsNonRoot, drop ALL
+    # capabilities, etc.) even though the namespace-level PSA won't force it.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: logging
+  labels:
+    name: logging
+    # Elasticsearch's increase-vm-max-map initContainer requires
+    # privileged: true (the standard way to raise vm.max_map_count on the
+    # host, which ES requires) - "baseline" blocks privileged containers
+    # outright, so this needs "privileged" enforcement for the same reason
+    # as the "monitoring" namespace above.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline

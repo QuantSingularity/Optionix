@@ -178,6 +178,7 @@ class AccountCreate(BaseModel):
 class AccountResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    id: int
     account_id: str
     ethereum_address: str
     account_type: str

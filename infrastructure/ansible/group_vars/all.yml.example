@@ -3,6 +3,18 @@
 # For secrets, use ansible-vault encrypt group_vars/vault.yml
 
 ---
+# Server addresses referenced by inventory/hosts.yml. These normally come
+# from Terraform's outputs (e.g. `terraform output` on the compute/database
+# modules) once infrastructure is provisioned - fill them in with your
+# actual instance IPs or DNS names.
+web1_ip: CHANGE_ME_WEB1_IP_OR_HOSTNAME
+web2_ip: CHANGE_ME_WEB2_IP_OR_HOSTNAME
+db1_ip: CHANGE_ME_DB1_IP_OR_HOSTNAME
+
+# Local path to the SSH private key used to connect to the servers above
+# (matches the key pair named by Terraform's key_name variable).
+ssh_key_path: ~/.ssh/optionix_deploy_key
+
 # Common settings
 ntp_servers:
   - 0.pool.ntp.org
@@ -34,6 +46,17 @@ mysql_users:
     host: "%"
     priv: "optionix.*:ALL"
     # Password should come from vault: "{{ vault_optionix_db_password }}"
+
+# Bridge the vault-prefixed secrets (group_vars/vault.yml) to the plain
+# names roles/database/vars/main.yml actually reads. Keeping secrets
+# vault_-prefixed in vault.yml while roles reference the unprefixed name
+# is the standard Ansible Vault convention - it makes it obvious at a
+# glance, from within a role, which variables are secrets without having
+# to open (or be able to decrypt) vault.yml.
+db_root_password: "{{ vault_mysql_root_password }}"
+db_password: "{{ vault_optionix_db_password }}"
+backup_password: "{{ vault_backup_db_password }}"
+monitor_password: "{{ vault_monitor_db_password }}"
 
 # Application settings
 app_name: optionix

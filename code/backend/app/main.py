@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from prometheus_client import make_asgi_app
 
 from .api import api_router
 from .config import settings
@@ -84,6 +85,11 @@ app.add_middleware(AuditLoggingMiddleware)
 
 # ── Routers ─────────────────────────────────────────────────────────────────
 app.include_router(api_router)
+
+# Prometheus metrics endpoint (served on the same port as the rest of the
+# API — the Kubernetes Deployment's prometheus.io/port annotation already
+# points at 8000, not a separate metrics port).
+app.mount("/metrics", make_asgi_app())
 
 
 # ── Exception handlers ──────────────────────────────────────────────────────

@@ -545,6 +545,10 @@ class ComplianceReport(Base):
     __tablename__ = "compliance_reports"
 
     id = Column(Integer, primary_key=True, index=True)
+    report_id = Column(
+        String(36), unique=True, index=True, default=lambda: str(uuid.uuid4())
+    )
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     report_type = Column(String(100), nullable=False)
     regulation_type = Column(String(50), nullable=False)
     reporting_period_start = Column(DateTime, nullable=False)
@@ -559,6 +563,7 @@ class ComplianceReport(Base):
 
     __table_args__ = (
         Index("idx_compliance_report_type", "report_type", "regulation_type"),
+        Index("idx_compliance_report_user", "user_id"),
         Index(
             "idx_compliance_report_period",
             "reporting_period_start",

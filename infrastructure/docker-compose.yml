@@ -13,8 +13,8 @@ services:
   # ── Backend API ─────────────────────────────────────────────────────────────
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../code/backend
+      dockerfile: ../../infrastructure/Dockerfile
     image: optionix/backend:${IMAGE_TAG:-latest}
     container_name: optionix-backend
     restart: unless-stopped
@@ -24,11 +24,9 @@ services:
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: "mysql://${DB_USER:-appuser}:${DB_PASSWORD}@db:3306/${DB_NAME:-optionix}"
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      REDIS_PASSWORD: "${REDIS_PASSWORD}"
-      JWT_SECRET: "${JWT_SECRET}"
+      DATABASE_URL: "mysql+pymysql://${DB_USER:-appuser}:${DB_PASSWORD}@db:3306/${DB_NAME:-optionix}"
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      SECRET_KEY: "${JWT_SECRET}"
       ENCRYPTION_KEY: "${ENCRYPTION_KEY}"
       ENVIRONMENT: "${ENVIRONMENT:-development}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
@@ -56,8 +54,8 @@ services:
   # ── Frontend ────────────────────────────────────────────────────────────────
   frontend:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend
+      context: ../web-frontend
+      dockerfile: ../infrastructure/Dockerfile.frontend
       args:
         REACT_APP_API_URL: "${REACT_APP_API_URL:-http://localhost:8000}"
         REACT_APP_ENV: "${ENVIRONMENT:-development}"
@@ -212,6 +210,25 @@ services:
       DATA_SOURCE_NAME: "root:${DB_ROOT_PASSWORD}@(db:3306)/"
     ports:
       - "127.0.0.1:9104:9104"
+    networks:
+      - optionix-net
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  # ── Redis Exporter ──────────────────────────────────────────────────────────
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    container_name: optionix-redis-exporter
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+    ports:
+      - "127.0.0.1:9121:9121"
     networks:
       - optionix-net
     security_opt:

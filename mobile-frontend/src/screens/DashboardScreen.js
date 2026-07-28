@@ -1,240 +1,301 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Button,
-  Card,
-  Divider,
-  List,
-  Text as PaperText,
-  Paragraph,
-  Title,
-  useTheme,
-} from "react-native-paper";
-import { marketService } from "../services/api";
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { ActivityIndicator, Button } from "react-native-paper";
+import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
+import CreateAccountPrompt from "../components/CreateAccountPrompt";
+import {
+  Badge,
+  CardHeaderRow,
+  CardMeta,
+  CardTitle,
+  EmptyState,
+  Grid2,
+  Screen,
+  SectionCard,
+  SimpleBarRow,
+  StatLabel,
+  StatValue,
+} from "../components/UI";
+import { extractErrorMessage } from "../services/api";
+import portfolioService from "../services/portfolioService";
+import tradingService from "../services/tradingService";
+import colors, { CHART_COLORS } from "../theme";
+import { formatCurrency, formatDateTime, formatPercent } from "../utils/format";
+import { useAuth } from "../context/AuthContext";
 
-const DashboardScreen = () => {
-  const [marketOverview, setMarketOverview] = useState(null);
-  const [loading, setLoading] = useState(true);
+const STATUS_TONE = {
+  executed: "success",
+  pending: "warning",
+  cancelled: "neutral",
+  rejected: "danger",
+  failed: "danger",
+};
+
+const StatCard = ({ icon, label, value, sub, subColor }) => (
+  <View style={styles.statCard}>
+    <View style={styles.statHeader}>
+      <MaterialCommunityIcons
+        name={icon}
+        size={14}
+        color={colors.textSecondary}
+      />
+      <StatLabel style={{ marginBottom: 0 }}>{label}</StatLabel>
+    </View>
+    <StatValue style={{ fontSize: 18, marginTop: 6 }}>{value}</StatValue>
+    {sub ? (
+      <Text
+        style={[styles.statSub, { color: subColor || colors.textSecondary }]}
+      >
+        {sub}
+      </Text>
+    ) : null}
+  </View>
+);
+
+const DashboardScreen = ({ navigation }) => {
+  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(null);
-  const [usingFallbackData, setUsingFallbackData] = useState(false);
-  const theme = useTheme();
+  const [error, setError] = useState("");
+  const [accounts, setAccounts] = useState([]);
+  const [overview, setOverview] = useState(null);
+  const [allocation, setAllocation] = useState(null);
+  const [orders, setOrders] = useState([]);
 
-  const getFallbackData = () => ({
-    marketStatus: "Open",
-    majorIndices: [
-      { name: "S&P 500", value: 4500.5, change: "+0.5%" },
-      { name: "Dow Jones", value: 35000.75, change: "+0.3%" },
-      { name: "NASDAQ", value: 14000.25, change: "+0.8%" },
-    ],
-    topMovers: [
-      { symbol: "AAPL", price: 175.5, change: "+1.2%" },
-      { symbol: "GOOGL", price: 2800.0, change: "+0.9%" },
-      { symbol: "TSLA", price: 700.0, change: "-0.5%" },
-    ],
-  });
-
-  const fetchMarketData = async () => {
+  const loadData = useCallback(async () => {
+    setError("");
     try {
-      setLoading(true);
-      setError(null);
-
-      // Try to fetch from API
-      const data = await marketService.getMarketOverview();
-      setMarketOverview(data);
-      setUsingFallbackData(false);
+      const accts = await tradingService.listAccounts();
+      setAccounts(accts);
+      if (accts.length > 0) {
+        const [ov, alloc, ord] = await Promise.all([
+          portfolioService.getOverview(),
+          portfolioService.getAllocation(),
+          tradingService.listOrders({ limit: 5 }),
+        ]);
+        setOverview(ov);
+        setAllocation(alloc);
+        setOrders(ord);
+      }
     } catch (err) {
-      console.error("Error fetching market overview:", err);
-
-      // Use fallback data when API fails
-      setMarketOverview(getFallbackData());
-      setUsingFallbackData(true);
-      setError(
-        "Using demo data. Check your connection to see live market data.",
-      );
-    } finally {
-      setLoading(false);
+      setError(extractErrorMessage(err, "Couldn't load your dashboard."));
     }
-  };
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchMarketData();
-    setRefreshing(false);
-  }, [fetchMarketData]);
+  }, []);
 
   useEffect(() => {
-    fetchMarketData();
+    (async () => {
+      setIsLoading(true);
+      await loadData();
+      setIsLoading(false);
+    })();
+  }, [loadData]);
 
-    // Refresh data every 30 seconds if not using fallback
-    const interval = setInterval(() => {
-      if (!usingFallbackData) {
-        fetchMarketData();
-      }
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [usingFallbackData, fetchMarketData]);
-
-  const renderChange = (change) => {
-    const changeStr =
-      typeof change === "string"
-        ? change
-        : `${change > 0 ? "+" : ""}${change}%`;
-    const isPositive = changeStr.startsWith("+");
-    return (
-      <PaperText
-        style={isPositive ? styles.positiveChange : styles.negativeChange}
-      >
-        {changeStr}
-      </PaperText>
-    );
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
   };
+
+  const firstName = user?.full_name?.split(" ")[0] || "there";
+  const hasAccount = accounts.length > 0;
+  const pnl = Number(overview?.total_unrealised_pnl || 0);
+
+  if (isLoading) {
+    return (
+      <Screen style={styles.centered}>
+        <ActivityIndicator color={colors.primary} size="large" />
+      </Screen>
+    );
+  }
 
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      style={{ backgroundColor: colors.background }}
+      contentContainerStyle={{ padding: 16 }}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={colors.primary}
+        />
       }
     >
-      <Title style={styles.title}>Market Dashboard</Title>
+      <Text style={styles.welcome}>Welcome back, {firstName}</Text>
+      <Text style={styles.welcomeSub}>
+        Here's what's happening across your accounts.
+      </Text>
 
-      {usingFallbackData && (
-        <Card style={[styles.card, styles.warningCard]}>
-          <Card.Content>
-            <Paragraph style={styles.warningText}>{error}</Paragraph>
-            <Button
-              mode="outlined"
-              onPress={fetchMarketData}
-              style={styles.retryButton}
-              compact
-            >
-              Retry Connection
-            </Button>
-          </Card.Content>
-        </Card>
-      )}
+      {error ? (
+        <SectionCard>
+          <Text style={{ color: colors.danger }}>{error}</Text>
+        </SectionCard>
+      ) : null}
 
-      {loading && !marketOverview && (
-        <ActivityIndicator
-          animating={true}
-          size="large"
-          style={styles.loadingIndicator}
-        />
-      )}
+      {!hasAccount ? (
+        <CreateAccountPrompt onCreated={loadData} />
+      ) : (
+        <>
+          <Grid2>
+            <View style={{ width: "50%", padding: 6 }}>
+              <StatCard
+                icon="briefcase-outline"
+                label="Total Equity"
+                value={formatCurrency(overview?.total_equity || 0)}
+              />
+            </View>
+            <View style={{ width: "50%", padding: 6 }}>
+              <StatCard
+                icon="chart-line"
+                label="Unrealized P&L"
+                value={formatCurrency(pnl)}
+                sub={pnl >= 0 ? "Positive exposure" : "Negative exposure"}
+                subColor={pnl >= 0 ? colors.success : colors.danger}
+              />
+            </View>
+            <View style={{ width: "50%", padding: 6 }}>
+              <StatCard
+                icon="shield-outline"
+                label="Margin Utilization"
+                value={formatPercent(overview?.margin_utilisation_pct || 0)}
+              />
+            </View>
+            <View style={{ width: "50%", padding: 6 }}>
+              <StatCard
+                icon="trending-up"
+                label="Open Positions"
+                value={String(overview?.open_positions ?? 0)}
+              />
+            </View>
+          </Grid2>
 
-      {marketOverview && (
-        <View>
-          <Card style={styles.card}>
-            <Card.Content>
-              <Title>
-                Market Status:{" "}
-                {marketOverview.marketStatus || marketOverview.status || "Open"}
-              </Title>
-            </Card.Content>
-          </Card>
-
-          <Card style={styles.card}>
-            <Card.Title title="Major Indices" />
-            <Card.Content>
-              {(
-                marketOverview.majorIndices ||
-                marketOverview.indices ||
-                []
-              ).map((index, i) => (
-                <React.Fragment key={i}>
-                  <List.Item
-                    title={`${index.name || index.symbol}: ${(index.value || index.price).toFixed(2)}`}
-                    right={() =>
-                      renderChange(index.change || index.change_percent)
-                    }
-                    titleStyle={styles.listItemTitle}
+          <SectionCard>
+            <CardHeaderRow>
+              <CardTitle>Allocation</CardTitle>
+            </CardHeaderRow>
+            {allocation?.allocations?.length > 0 ? (
+              allocation.allocations.map((a, i) => (
+                <SimpleBarRow
+                  key={a.symbol}
+                  label={a.symbol}
+                  valueLabel={`${formatCurrency(a.exposure)} · ${formatPercent(a.weight_pct)}`}
+                  pct={Number(a.weight_pct)}
+                  color={CHART_COLORS[i % CHART_COLORS.length]}
+                />
+              ))
+            ) : (
+              <EmptyState
+                icon={
+                  <MaterialCommunityIcons
+                    name="chart-donut"
+                    size={28}
+                    color={colors.borderAccent}
                   />
-                  {i <
-                    (
-                      marketOverview.majorIndices ||
-                      marketOverview.indices ||
-                      []
-                    ).length -
-                      1 && <Divider />}
-                </React.Fragment>
-              ))}
-            </Card.Content>
-          </Card>
+                }
+                title="No open positions yet"
+                description="Place your first trade to see your allocation here."
+              />
+            )}
+          </SectionCard>
 
-          <Card style={styles.card}>
-            <Card.Title title="Top Movers" />
-            <Card.Content>
-              {(marketOverview.topMovers || marketOverview.movers || []).map(
-                (stock, i) => (
-                  <React.Fragment key={i}>
-                    <List.Item
-                      title={`${stock.symbol}: $${(stock.price || stock.value).toFixed(2)}`}
-                      right={() =>
-                        renderChange(stock.change || stock.change_percent)
-                      }
-                      titleStyle={styles.listItemTitle}
-                    />
-                    {i <
-                      (marketOverview.topMovers || marketOverview.movers || [])
-                        .length -
-                        1 && <Divider />}
-                  </React.Fragment>
-                ),
-              )}
-            </Card.Content>
-          </Card>
-        </View>
+          <SectionCard>
+            <CardHeaderRow>
+              <CardTitle>Recent Orders</CardTitle>
+              <CardMeta>{orders.length} shown</CardMeta>
+            </CardHeaderRow>
+            {orders.length > 0 ? (
+              orders.map((o) => (
+                <View key={o.trade_id} style={styles.orderRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.orderSymbol}>{o.symbol}</Text>
+                    <Text style={styles.orderMeta}>
+                      {o.trade_type.toUpperCase()} · {o.quantity} ·{" "}
+                      {formatDateTime(o.created_at)}
+                    </Text>
+                  </View>
+                  <Badge tone={STATUS_TONE[o.status] || "neutral"}>
+                    {o.status}
+                  </Badge>
+                </View>
+              ))
+            ) : (
+              <EmptyState
+                icon={
+                  <MaterialCommunityIcons
+                    name="clipboard-text-outline"
+                    size={28}
+                    color={colors.borderAccent}
+                  />
+                }
+                title="No orders yet"
+                description="Your executed and pending orders show up here."
+              />
+            )}
+            <Button
+              mode="text"
+              onPress={() => navigation.navigate("Trading")}
+              style={{ marginTop: 4 }}
+            >
+              Go to Trading →
+            </Button>
+          </SectionCard>
+        </>
       )}
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 15,
+  centered: { justifyContent: "center", alignItems: "center" },
+  welcome: {
+    color: colors.textPrimary,
+    fontSize: 22,
+    fontWeight: "800",
+    marginBottom: 4,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
+  welcomeSub: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    marginBottom: 18,
   },
-  loadingIndicator: {
-    marginTop: 30,
-    marginBottom: 30,
+  statCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    padding: 14,
   },
-  card: {
-    marginBottom: 20,
-    elevation: 4,
+  statHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
-  warningCard: {
-    backgroundColor: "#FFF3CD",
-    borderLeftWidth: 4,
-    borderLeftColor: "#FFA500",
+  statSub: {
+    fontSize: 11.5,
+    marginTop: 4,
   },
-  warningText: {
-    color: "#856404",
-    marginBottom: 10,
+  orderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
-  retryButton: {
-    borderColor: "#FFA500",
+  orderSymbol: {
+    color: colors.textPrimary,
+    fontSize: 13.5,
+    fontWeight: "600",
   },
-  listItemTitle: {
-    fontSize: 16,
-  },
-  positiveChange: {
-    color: "#34C759",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  negativeChange: {
-    color: "#FF3B30",
-    fontWeight: "bold",
-    fontSize: 16,
+  orderMeta: {
+    color: colors.textSecondary,
+    fontSize: 11.5,
+    marginTop: 2,
   },
 });
 

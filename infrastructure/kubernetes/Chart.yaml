@@ -1,0 +1,16 @@
+apiVersion: v2
+name: optionix
+description: >-
+  Optionix trading platform - backend API, web frontend, MySQL database,
+  Redis cache, and an optional Prometheus/Grafana/Elasticsearch monitoring
+  stack.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - optionix
+  - trading
+  - fintech
+home: https://github.com/quantsingularity/Optionix
+maintainers:
+  - name: Optionix Engineering

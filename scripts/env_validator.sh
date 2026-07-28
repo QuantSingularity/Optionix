@@ -128,9 +128,9 @@ check_node_deps() {
       step_success "npm installed: $NPM_VERSION"
 
       # Install frontend dependencies
-      if [ -f "code/web-frontend/package.json" ]; then
+      if [ -f "web-frontend/package.json" ]; then
         step_info "Installing frontend dependencies..."
-        cd code/web-frontend
+        cd web-frontend
         npm install
         cd - > /dev/null
         step_success "Frontend dependencies installed"
@@ -139,9 +139,9 @@ check_node_deps() {
       fi
 
       # Install mobile dependencies
-      if [ -f "code/mobile-frontend/package.json" ]; then
+      if [ -f "mobile-frontend/package.json" ]; then
         step_info "Installing mobile dependencies..."
-        cd code/mobile-frontend
+        cd mobile-frontend
         npm install
         cd - > /dev/null
         step_success "Mobile dependencies installed"
@@ -341,7 +341,7 @@ validate_project_structure() {
   fi
 
   # Check required directories
-  for dir in code code/backend code/web-frontend; do
+  for dir in code code/backend web-frontend; do
     if [ -d "$dir" ]; then
       step_success "Required directory exists: $dir"
     else
@@ -352,7 +352,7 @@ validate_project_structure() {
   done
 
   # Check optional directories
-  for dir in code/ai_models code/blockchain code/mobile-frontend docs infrastructure resources; do
+  for dir in code/ai_models code/blockchain mobile-frontend docs infrastructure resources; do
     if [ -d "$dir" ]; then
       step_success "Optional directory exists: $dir"
     else
@@ -409,19 +409,19 @@ if [ -d "code/backend" ]; then
 fi
 
 # Install frontend dependencies
-if [ -d "code/web-frontend" ]; then
+if [ -d "web-frontend" ]; then
   echo "Installing frontend dependencies..."
-  cd code/web-frontend
+  cd web-frontend
   npm install
-  cd ../..
+  cd ..
 fi
 
 # Install mobile dependencies
-if [ -d "code/mobile-frontend" ]; then
+if [ -d "mobile-frontend" ]; then
   echo "Installing mobile dependencies..."
-  cd code/mobile-frontend
+  cd mobile-frontend
   npm install
-  cd ../..
+  cd ..
 fi
 
 echo "Setup completed successfully!"
@@ -449,7 +449,7 @@ source venv/bin/activate || source venv/Scripts/activate
 # Start backend server
 echo "Starting backend server..."
 cd code/backend
-python -m uvicorn app:app --host 0.0.0.0 --port 8000 &
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
 cd ../..
 
@@ -459,9 +459,9 @@ sleep 5
 
 # Start frontend development server
 echo "Starting frontend server..."
-cd code/web-frontend
+cd web-frontend
 npm start
-cd ../..
+cd ..
 
 # Cleanup on exit
 trap "kill $BACKEND_PID" EXIT
@@ -499,22 +499,22 @@ else
 fi
 
 # Check for JavaScript/TypeScript linting tools
-if [ -d "code/web-frontend" ]; then
-  cd code/web-frontend
+if [ -d "web-frontend" ]; then
+  cd web-frontend
   if [ -f "package.json" ]; then
     echo "Running frontend linting..."
     npm run lint
   fi
-  cd ../..
+  cd ..
 fi
 
-if [ -d "code/mobile-frontend" ]; then
-  cd code/mobile-frontend
+if [ -d "mobile-frontend" ]; then
+  cd mobile-frontend
   if [ -f "package.json" ]; then
     echo "Running mobile app linting..."
     npm run lint
   fi
-  cd ../..
+  cd ..
 fi
 
 echo "Linting process completed!"
@@ -534,7 +534,7 @@ EOF
 
 echo "Starting backend server..."
 cd code/backend
-python -m uvicorn app:app --host 0.0.0.0 --port 8000 &
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
 
 # Wait for backend to start
@@ -547,9 +547,9 @@ echo "1. Testing root endpoint"
 curl -s http://localhost:8000/ | grep "Welcome to Optionix API"
 
 echo "2. Testing volatility prediction endpoint"
-curl -s -X POST http://localhost:8000/predict_volatility \
+curl -s -X POST http://localhost:8000/market/volatility \
   -H "Content-Type: application/json" \
-  -d '{"open": 42500, "high": 43000, "low": 42000, "volume": 1000000}'
+  -d '{"symbol": "BTC-USD", "open": 42500, "high": 43000, "low": 42000, "volume": 1000000}'
 
 # Kill the backend process when done
 echo "Stopping backend server..."
@@ -602,7 +602,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
 
   frontend:
-    build: ./code/web-frontend
+    build: ./web-frontend
     ports:
       - "80:80"
     depends_on:
@@ -621,6 +621,15 @@ EOF
 main() {
   echo -e "${YELLOW}=== Optionix Environment Validator ===${NC}"
   echo -e "${BLUE}$(date)${NC}"
+
+  # Resolve the project root relative to this script's location (not the
+  # caller's CWD) so this works whether invoked as `./scripts/env_validator.sh`
+  # from the repo root or as `./env_validator.sh` from within scripts/ itself.
+  # Every path check in this script (code/backend, web-frontend, etc.) is
+  # relative to the project root.
+  PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+  cd "$PROJECT_ROOT"
+  step_info "Working from project root: $PROJECT_ROOT"
 
   # Validate project structure first
   validate_project_structure || exit 1

@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     port: int = 8000
     workers: int = 4
 
-    database_url: str = "postgresql://user:password@localhost/optionix"
+    database_url: str = "mysql+pymysql://user:password@localhost/optionix"
     database_pool_size: int = 20
     database_max_overflow: int = 30
     database_pool_timeout: int = 30
@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     log_max_size: int = 10485760
     log_backup_count: int = 5
 
+    enable_audit_logging: bool = True
     audit_log_retention_days: int = 2555
     audit_log_encryption: bool = True
     audit_log_integrity_check: bool = True

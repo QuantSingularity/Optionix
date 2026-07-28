@@ -124,22 +124,40 @@ check_requirements() {
   fi
 
   # Check if we can connect to the database
-  if PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d postgres -c "SELECT 1" &>/dev/null; then
+  if PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "SELECT 1" &>/dev/null; then
     step_success "Successfully connected to PostgreSQL server"
   else
-    step_error "Could not connect to PostgreSQL server. Please check connection settings."
+    step_error "Could not connect to PostgreSQL server at $DB_HOST:$DB_PORT. Please check connection settings."
 
-    # Try with Docker
-    if command_exists docker && docker ps | grep -q postgres; then
-      step_info "PostgreSQL Docker container found. Using container settings..."
-      DB_HOST="localhost"
-      DB_PORT="5432"
-      step_info "Updated connection settings: $DB_HOST:$DB_PORT"
+    # Try with Docker: inspect the actual container's published port rather
+    # than assuming localhost:5432 (which may just repeat the connection we
+    # already know failed, or silently override a host/port the caller
+    # explicitly asked for).
+    if command_exists docker; then
+      CONTAINER_ID=$(docker ps --filter "name=postgres" --format "{{.ID}}" | head -n 1)
+      if [ -z "$CONTAINER_ID" ]; then
+        CONTAINER_ID=$(docker ps --filter "ancestor=postgres" --format "{{.ID}}" | head -n 1)
+      fi
 
-      if PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d postgres -c "SELECT 1" &>/dev/null; then
-        step_success "Successfully connected to PostgreSQL Docker container"
+      if [ -n "$CONTAINER_ID" ]; then
+        step_info "PostgreSQL Docker container found ($CONTAINER_ID). Inspecting its published port..."
+        MAPPED_PORT=$(docker port "$CONTAINER_ID" 5432/tcp 2>/dev/null | head -n 1 | sed -E 's/.*:([0-9]+)$/\1/')
+
+        if [ -n "$MAPPED_PORT" ]; then
+          DB_HOST="localhost"
+          DB_PORT="$MAPPED_PORT"
+          step_info "Updated connection settings from container: $DB_HOST:$DB_PORT"
+
+          if PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "SELECT 1" &>/dev/null; then
+            step_success "Successfully connected to PostgreSQL Docker container"
+          else
+            step_error "Could not connect to PostgreSQL Docker container at $DB_HOST:$DB_PORT. Please check connection settings." "exit"
+          fi
+        else
+          step_error "Found a PostgreSQL container but could not determine its published port. Please check connection settings." "exit"
+        fi
       else
-        step_error "Could not connect to PostgreSQL Docker container. Please check connection settings." "exit"
+        step_error "Could not find a running PostgreSQL container. Please start PostgreSQL server." "exit"
       fi
     else
       step_error "Could not find PostgreSQL server. Please start PostgreSQL server." "exit"
@@ -160,11 +178,11 @@ setup_database() {
   section_header "Setting Up Database"
 
   # Check if database exists
-  if PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d postgres -c "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" | grep -q 1; then
+  if PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" | grep -q 1; then
     step_info "Database '$DB_NAME' already exists"
   else
     step_info "Creating database '$DB_NAME'..."
-    PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d postgres -c "CREATE DATABASE $DB_NAME"
+    PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "CREATE DATABASE $DB_NAME"
     step_success "Database '$DB_NAME' created"
   fi
 
@@ -177,7 +195,7 @@ setup_database() {
     for schema_file in "$SCHEMA_DIR"/*.sql; do
       if [ -f "$schema_file" ]; then
         step_info "Applying schema: $(basename "$schema_file")"
-        PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$schema_file"
+        PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f "$schema_file"
         step_success "Schema applied: $(basename "$schema_file")"
       fi
     done
@@ -188,7 +206,7 @@ setup_database() {
     mkdir -p "$SCHEMA_DIR"
 
     # Create default schema file
-    cat > "$SCHEMA_DIR/01_initial_schema.sql" << EOF
+    cat > "$SCHEMA_DIR/01_initial_schema.sql" << 'EOF'
 -- Initial schema for Optionix database
 
 -- Users table
@@ -276,7 +294,7 @@ EOF
 
     # Apply default schema
     step_info "Applying default schema..."
-    PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$SCHEMA_DIR/01_initial_schema.sql"
+    PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f "$SCHEMA_DIR/01_initial_schema.sql"
     step_success "Default schema applied"
   fi
 
@@ -291,12 +309,12 @@ run_migrations() {
   MIGRATION_DIR="./code/backend/database/migrations"
   if [ -d "$MIGRATION_DIR" ]; then
     # Get list of applied migrations
-    APPLIED_MIGRATIONS=$(PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -t -c "SELECT migration_name FROM migrations ORDER BY id" 2>/dev/null || echo "")
+    APPLIED_MIGRATIONS=$(PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT migration_name FROM migrations ORDER BY id" 2>/dev/null || echo "")
 
     # Create migrations table if it doesn't exist
-    if ! PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -c "SELECT 1 FROM information_schema.tables WHERE table_name = 'migrations'" | grep -q 1; then
+    if ! PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1 FROM information_schema.tables WHERE table_name = 'migrations'" | grep -q 1; then
       step_info "Creating migrations table..."
-      PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -c "
+      PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
         CREATE TABLE migrations (
             id SERIAL PRIMARY KEY,
             migration_name VARCHAR(255) NOT NULL,
@@ -316,10 +334,10 @@ run_migrations() {
           step_info "Migration already applied: $MIGRATION_NAME"
         else
           step_info "Applying migration: $MIGRATION_NAME"
-          PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$migration_file"
+          PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f "$migration_file"
 
           # Record migration
-          PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -c "
+          PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
             INSERT INTO migrations (migration_name) VALUES ('$MIGRATION_NAME')
           "
 
@@ -347,7 +365,7 @@ seed_database() {
     for seed_file in "$SEED_DIR"/*.sql; do
       if [ -f "$seed_file" ]; then
         step_info "Applying seed: $(basename "$seed_file")"
-        PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$seed_file"
+        PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f "$seed_file"
         step_success "Seed applied: $(basename "$seed_file")"
       fi
     done
@@ -358,7 +376,7 @@ seed_database() {
     mkdir -p "$SEED_DIR"
 
     # Create default seed file
-    cat > "$SEED_DIR/01_test_data.sql" << EOF
+    cat > "$SEED_DIR/01_test_data.sql" << 'EOF'
 -- Test data for Optionix database
 
 -- Insert test users
@@ -420,7 +438,7 @@ EOF
 
     # Apply default seed
     step_info "Applying default seed data..."
-    PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$SEED_DIR/01_test_data.sql"
+    PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f "$SEED_DIR/01_test_data.sql"
     step_success "Default seed data applied"
   fi
 
@@ -436,7 +454,7 @@ backup_database() {
   BACKUP_FILE="$BACKUP_DIR/${DB_NAME}_${TIMESTAMP}.sql"
 
   step_info "Creating backup: $BACKUP_FILE"
-  PGPASSWORD=$DB_PASSWORD pg_dump -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$BACKUP_FILE"
+  PGPASSWORD=$DB_PASSWORD pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f "$BACKUP_FILE"
 
   # Compress backup
   step_info "Compressing backup..."
@@ -455,11 +473,13 @@ restore_database() {
 
   # List available backups
   step_info "Available backups:"
-  ls -lh "$BACKUP_DIR" | grep -v "^total"
+  for backup_file in "$BACKUP_DIR"/*; do
+    [ -f "$backup_file" ] && ls -lh "$backup_file"
+  done
 
   # Prompt for backup file
   step_info "Please specify the backup file to restore:"
-  read -p "Backup file: " BACKUP_FILE
+  read -r -p "Backup file: " BACKUP_FILE
 
   # Check if file exists
   if [ ! -f "$BACKUP_DIR/$BACKUP_FILE" ] && [ ! -f "$BACKUP_FILE" ]; then
@@ -485,13 +505,13 @@ restore_database() {
   step_info "Restoring database from backup..."
 
   # Drop and recreate database
-  PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d postgres -c "
+  PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "
     DROP DATABASE IF EXISTS $DB_NAME;
     CREATE DATABASE $DB_NAME;
   "
 
   # Restore from backup
-  PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$FULL_BACKUP_PATH"
+  PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f "$FULL_BACKUP_PATH"
 
   # Clean up temporary file if created
   if [[ "$FULL_BACKUP_PATH" == *.tmp ]]; then
@@ -506,7 +526,7 @@ reset_database() {
   section_header "Resetting Database"
 
   step_info "This will drop and recreate the database. All data will be lost."
-  read -p "Are you sure you want to continue? (y/n): " CONFIRM
+  read -r -p "Are you sure you want to continue? (y/n): " CONFIRM
 
   if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
     step_info "Database reset cancelled"
@@ -515,7 +535,7 @@ reset_database() {
 
   # Drop and recreate database
   step_info "Dropping database '$DB_NAME'..."
-  PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d postgres -c "
+  PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "
     DROP DATABASE IF EXISTS $DB_NAME;
     CREATE DATABASE $DB_NAME;
   "
@@ -525,7 +545,7 @@ reset_database() {
   setup_database
 
   # Ask if user wants to seed the database
-  read -p "Do you want to seed the database with test data? (y/n): " SEED_CONFIRM
+  read -r -p "Do you want to seed the database with test data? (y/n): " SEED_CONFIRM
 
   if [ "$SEED_CONFIRM" = "y" ] || [ "$SEED_CONFIRM" = "Y" ]; then
     seed_database

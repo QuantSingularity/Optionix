@@ -6,7 +6,10 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --only=production=false
+# Plain `npm ci` installs devDependencies too (webpack itself is a
+# devDependency here, and is required to build) - `--only=production=false`
+# is not valid npm syntax and only produces an "invalid config" warning.
+RUN npm ci
 
 COPY . .
 
@@ -22,7 +25,10 @@ FROM nginx:1.25-alpine
 
 RUN addgroup -S optionix && adduser -S -G optionix -u 1000 optionix
 
-COPY --from=builder /app/build /usr/share/nginx/html
+# webpack.config.js outputs to dist/ (this project uses a custom webpack
+# setup, not create-react-app, which is the only reason "build/" would be
+# correct).
+COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
 
 RUN chown -R optionix:optionix /usr/share/nginx/html \

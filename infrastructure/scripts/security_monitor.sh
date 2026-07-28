@@ -6,7 +6,6 @@
 set -euo pipefail
 
 # Configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/var/log/optionix/security_monitor.log"
 ALERT_EMAIL="security@optionix.com"
 METRICS_ENDPOINT="http://localhost:9091/metrics/job/security_monitor"
@@ -25,14 +24,33 @@ send_alert() {
 
     log "ALERT [$severity]: $message"
 
-    # Send email alert
-    echo "$message" | mail -s "$subject" "$ALERT_EMAIL"
+    # Send email alert. `mail` is frequently unavailable (esp. in
+    # containers/minimal images) - since this IS the alerting mechanism,
+    # it must never let a missing/failing `mail` command kill the whole
+    # monitoring run (which `set -e` would otherwise do here).
+    if command -v mail >/dev/null 2>&1; then
+        echo "$message" | mail -s "$subject" "$ALERT_EMAIL" || log "WARN: failed to send email alert"
+    else
+        log "WARN: 'mail' command not found - skipping email alert"
+    fi
 
     # Send to monitoring system
     curl -X POST "$METRICS_ENDPOINT" \
         -H "Content-Type: application/json" \
         -d "{\"alert\":\"$severity\",\"message\":\"$message\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" \
         2>/dev/null || true
+}
+
+# Resolve the system auth log path. /var/log/auth.log is Debian/Ubuntu-
+# specific; RHEL/CentOS-family systems use /var/log/secure instead, and
+# some minimal or containerized systems have neither. Echoes the path if
+# found, or nothing (with a warning to the log) if not.
+detect_auth_log() {
+    if [ -f /var/log/auth.log ]; then
+        echo "/var/log/auth.log"
+    elif [ -f /var/log/secure ]; then
+        echo "/var/log/secure"
+    fi
 }
 
 # Check system integrity
@@ -65,20 +83,34 @@ check_system_integrity() {
 check_authentication() {
     log "Monitoring authentication events..."
 
+    # /var/log/auth.log is Debian/Ubuntu-specific; RHEL/CentOS-family
+    # systems log this to /var/log/secure instead, and some minimal or
+    # containerized systems have neither. Guard against both, consistent
+    # with how every other log file below is checked before use.
+    local auth_log
+    auth_log=$(detect_auth_log)
+    if [ -z "$auth_log" ]; then
+        log "WARN: no auth log found at /var/log/auth.log or /var/log/secure - skipping authentication checks"
+        return 0
+    fi
+
     # Check for failed SSH attempts
-    local failed_ssh=$(grep "Failed password" /var/log/auth.log | grep "$(date '+%b %d')" | wc -l)
+    local failed_ssh
+    failed_ssh=$(grep "Failed password" "$auth_log" | grep -c "$(date '+%b %d')" || true)
     if [ "$failed_ssh" -gt 50 ]; then
         send_alert "HIGH" "Excessive SSH login failures detected: $failed_ssh attempts today"
     fi
 
     # Check for successful root logins
-    local root_logins=$(grep "Accepted.*root" /var/log/auth.log | grep "$(date '+%b %d')" | wc -l)
+    local root_logins
+    root_logins=$(grep "Accepted.*root" "$auth_log" | grep -c "$(date '+%b %d')" || true)
     if [ "$root_logins" -gt 0 ]; then
         send_alert "CRITICAL" "Root login detected: $root_logins successful root logins today"
     fi
 
     # Check for privilege escalation
-    local sudo_usage=$(grep "sudo:" /var/log/auth.log | grep "$(date '+%b %d')" | wc -l)
+    local sudo_usage
+    sudo_usage=$(grep "sudo:" "$auth_log" | grep -c "$(date '+%b %d')" || true)
     if [ "$sudo_usage" -gt 100 ]; then
         send_alert "MEDIUM" "High sudo usage detected: $sudo_usage sudo commands today"
     fi
@@ -88,16 +120,37 @@ check_authentication() {
 check_network_security() {
     log "Checking network security..."
 
-    # Check for unusual network connections
-    local external_connections=$(netstat -tn | grep ESTABLISHED | grep -v "127.0.0.1\|10\.\|192\.168\." | wc -l)
-    if [ "$external_connections" -gt 100 ]; then
-        send_alert "MEDIUM" "High number of external connections: $external_connections"
-    fi
+    if command -v netstat >/dev/null 2>&1; then
+        # Check for unusual network connections
+        local external_connections
+        external_connections=$(netstat -tn | grep ESTABLISHED | grep -vc "127.0.0.1\|10\.\|192\.168\." || true)
+        if [ "$external_connections" -gt 100 ]; then
+            send_alert "MEDIUM" "High number of external connections: $external_connections"
+        fi
 
-    # Check for listening services
-    local listening_ports=$(netstat -tln | grep LISTEN | wc -l)
-    if [ "$listening_ports" -gt 20 ]; then
-        send_alert "LOW" "Many listening ports detected: $listening_ports ports"
+        # Check for listening services
+        local listening_ports
+        listening_ports=$(netstat -tln | grep -c LISTEN || true)
+        if [ "$listening_ports" -gt 20 ]; then
+            send_alert "LOW" "Many listening ports detected: $listening_ports ports"
+        fi
+    elif command -v ss >/dev/null 2>&1; then
+        # netstat (net-tools) isn't installed by default on many modern
+        # distributions anymore - ss (iproute2) is the standard
+        # replacement and ships with virtually every current system.
+        local external_connections
+        external_connections=$(ss -tn state established | grep -vc "127.0.0.1\|10\.\|192\.168\." || true)
+        if [ "$external_connections" -gt 100 ]; then
+            send_alert "MEDIUM" "High number of external connections: $external_connections"
+        fi
+
+        local listening_ports
+        listening_ports=$(ss -tln | grep -c LISTEN || true)
+        if [ "$listening_ports" -gt 20 ]; then
+            send_alert "LOW" "Many listening ports detected: $listening_ports ports"
+        fi
+    else
+        log "WARN: neither netstat nor ss found - skipping connection checks"
     fi
 
     # Check firewall status
@@ -116,19 +169,22 @@ check_application_security() {
     local app_log="/var/log/optionix/application.log"
     if [ -f "$app_log" ]; then
         # Check for SQL injection attempts
-        local sql_injection=$(grep -i "union\|select\|drop\|insert\|update\|delete" "$app_log" | grep "$(date '+%Y-%m-%d')" | wc -l)
+        local sql_injection
+        sql_injection=$(grep -i "union\|select\|drop\|insert\|update\|delete" "$app_log" | grep -c "$(date '+%Y-%m-%d')" || true)
         if [ "$sql_injection" -gt 10 ]; then
             send_alert "HIGH" "Potential SQL injection attempts detected: $sql_injection events"
         fi
 
         # Check for XSS attempts
-        local xss_attempts=$(grep -i "script\|javascript\|onerror\|onload" "$app_log" | grep "$(date '+%Y-%m-%d')" | wc -l)
+        local xss_attempts
+        xss_attempts=$(grep -i "script\|javascript\|onerror\|onload" "$app_log" | grep -c "$(date '+%Y-%m-%d')" || true)
         if [ "$xss_attempts" -gt 5 ]; then
             send_alert "HIGH" "Potential XSS attempts detected: $xss_attempts events"
         fi
 
         # Check for authentication failures
-        local auth_failures=$(grep -i "authentication failed\|invalid credentials\|login failed" "$app_log" | grep "$(date '+%Y-%m-%d')" | wc -l)
+        local auth_failures
+        auth_failures=$(grep -i "authentication failed\|invalid credentials\|login failed" "$app_log" | grep -c "$(date '+%Y-%m-%d')" || true)
         if [ "$auth_failures" -gt 100 ]; then
             send_alert "MEDIUM" "High authentication failure rate: $auth_failures failures today"
         fi
@@ -143,13 +199,15 @@ check_database_security() {
     local mysql_error_log="/var/log/mysql/error.log"
     if [ -f "$mysql_error_log" ]; then
         # Check for access denied events
-        local access_denied=$(grep "Access denied" "$mysql_error_log" | grep "$(date '+%Y-%m-%d')" | wc -l)
+        local access_denied
+        access_denied=$(grep "Access denied" "$mysql_error_log" | grep -c "$(date '+%Y-%m-%d')" || true)
         if [ "$access_denied" -gt 50 ]; then
             send_alert "MEDIUM" "High database access denial rate: $access_denied denials today"
         fi
 
         # Check for connection errors
-        local conn_errors=$(grep "connection.*error" "$mysql_error_log" | grep "$(date '+%Y-%m-%d')" | wc -l)
+        local conn_errors
+        conn_errors=$(grep "connection.*error" "$mysql_error_log" | grep -c "$(date '+%Y-%m-%d')" || true)
         if [ "$conn_errors" -gt 20 ]; then
             send_alert "MEDIUM" "High database connection error rate: $conn_errors errors today"
         fi
@@ -193,7 +251,8 @@ check_compliance() {
     # Check backup status
     local backup_log="/var/log/optionix/backup.log"
     if [ -f "$backup_log" ]; then
-        local last_backup=$(grep "Backup completed" "$backup_log" | tail -1 | awk '{print $1, $2}')
+        local last_backup
+        last_backup=$(grep "Backup completed" "$backup_log" | tail -1 | awk '{print $1, $2}' || true)
         if [ -n "$last_backup" ]; then
             local backup_epoch=$(date -d "$last_backup" +%s)
             local current_epoch=$(date +%s)
@@ -245,7 +304,7 @@ generate_compliance_report() {
 
         echo "System Information:"
         echo "- Hostname: $(hostname)"
-        echo "- OS: $(lsb_release -d | cut -f2)"
+        echo "- OS: $(command -v lsb_release >/dev/null 2>&1 && lsb_release -d | cut -f2 || echo 'Unknown')"
         echo "- Kernel: $(uname -r)"
         echo "- Uptime: $(uptime -p)"
         echo
@@ -254,13 +313,19 @@ generate_compliance_report() {
         systemctl is-active fail2ban 2>/dev/null && echo "- Fail2ban: Active" || echo "- Fail2ban: Inactive"
         systemctl is-active auditd 2>/dev/null && echo "- Auditd: Active" || echo "- Auditd: Inactive"
         systemctl is-active clamav-daemon 2>/dev/null && echo "- ClamAV: Active" || echo "- ClamAV: Inactive"
-        ufw status | grep -q "Status: active" && echo "- UFW: Active" || echo "- UFW: Inactive"
+        ufw status 2>/dev/null | grep -q "Status: active" && echo "- UFW: Active" || echo "- UFW: Inactive"
         echo
 
         echo "Recent Security Events:"
-        echo "- Failed SSH attempts (last 24h): $(grep "Failed password" /var/log/auth.log | grep "$(date '+%b %d')" | wc -l)"
-        echo "- Successful logins (last 24h): $(grep "Accepted" /var/log/auth.log | grep "$(date '+%b %d')" | wc -l)"
-        echo "- Sudo usage (last 24h): $(grep "sudo:" /var/log/auth.log | grep "$(date '+%b %d')" | wc -l)"
+        local report_auth_log
+        report_auth_log=$(detect_auth_log)
+        if [ -n "$report_auth_log" ]; then
+            echo "- Failed SSH attempts (last 24h): $(grep "Failed password" "$report_auth_log" | grep -c "$(date '+%b %d')" || true)"
+            echo "- Successful logins (last 24h): $(grep "Accepted" "$report_auth_log" | grep -c "$(date '+%b %d')" || true)"
+            echo "- Sudo usage (last 24h): $(grep "sudo:" "$report_auth_log" | grep -c "$(date '+%b %d')" || true)"
+        else
+            echo "- No auth log found at /var/log/auth.log or /var/log/secure"
+        fi
         echo
 
         echo "File Integrity:"
@@ -285,7 +350,12 @@ generate_compliance_report() {
     log "Compliance report generated: $report_file"
 
     # Email the report
-    mail -s "[OPTIONIX-${ENVIRONMENT}] Daily Compliance Report" "$ALERT_EMAIL" < "$report_file"
+    if command -v mail >/dev/null 2>&1; then
+        mail -s "[OPTIONIX-${ENVIRONMENT}] Daily Compliance Report" "$ALERT_EMAIL" < "$report_file" \
+            || log "WARN: failed to email compliance report"
+    else
+        log "WARN: 'mail' command not found - compliance report saved to $report_file but not emailed"
+    fi
 }
 
 # Main execution

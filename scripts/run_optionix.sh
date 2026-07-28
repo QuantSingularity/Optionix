@@ -16,7 +16,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Determine the project root (one level up from the script)
-PROJECT_ROOT="$(dirname "$0")/.."
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo -e "${BLUE}Starting Optionix application...${NC}"
 
@@ -43,7 +43,7 @@ source "$VENV_DIR/bin/activate"
 
 # Run the backend server in the background
 # Use uvicorn directly as it's a standard practice for FastAPI
-uvicorn app:app --host 0.0.0.0 --port 8000 &
+uvicorn app.main:app --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
 echo -e "${GREEN}Backend started with PID: ${BACKEND_PID}${NC}"
 
@@ -53,6 +53,9 @@ sleep 5
 
 # --- Frontend Setup and Start ---
 FRONTEND_DIR="$PROJECT_ROOT/web-frontend" # Using web-frontend as per ls output
+FRONTEND_PID="" # Default to empty; only set if the frontend actually starts,
+                 # so cleanup() below doesn't fail on an unbound variable
+                 # under `set -u` if this branch is skipped entirely.
 
 if [ ! -d "$FRONTEND_DIR" ]; then
   echo -e "${RED}Error: Frontend directory not found at $FRONTEND_DIR.${NC}"

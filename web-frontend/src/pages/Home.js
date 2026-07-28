@@ -523,7 +523,7 @@ const Home = () => {
         </NavLogo>
         <NavLinks>
           <NavBtn to="/login">Sign In</NavBtn>
-          <NavBtn to="/login" $primary="true">
+          <NavBtn to="/signup" $primary="true">
             Get Started <FiArrowRight />
           </NavBtn>
         </NavLinks>
@@ -581,7 +581,7 @@ const Home = () => {
         </HeroSub>
 
         <HeroBtns>
-          <PrimaryBtn to="/login">
+          <PrimaryBtn to="/signup">
             Start Trading Free <FiArrowRight />
           </PrimaryBtn>
           <SecondaryBtn to="/login">
@@ -716,7 +716,7 @@ const Home = () => {
             required — start with our demo account instantly.
           </CTASub>
           <PrimaryBtn
-            to="/login"
+            to="/signup"
             style={{ display: "inline-flex", margin: "0 auto" }}
           >
             Open Free Account <FiArrowRight />

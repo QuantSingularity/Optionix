@@ -70,27 +70,37 @@ else
 fi
 
 # Install required Python linting tools if not already installed
-# Using --user to install to the user's home directory to avoid permission issues
+# Using --user to install to the user's home directory to avoid permission issues.
+# Modern Debian/Ubuntu (PEP 668) refuses `pip install` outside a venv unless
+# --break-system-packages is passed; fall back without it for older pip
+# versions that don't recognize the flag. Treated as non-fatal so a tooling
+# install hiccup doesn't abort the whole lint run before any linting happens.
 echo "----------------------------------------"
 echo "Installing/Updating Python linting tools (user-level install)..."
-pip3 install --user --upgrade black isort flake8 pylint pyyaml
+if ! pip3 install --user --upgrade --break-system-packages black isort flake8 pylint pyyaml 2>/dev/null; then
+  pip3 install --user --upgrade black isort flake8 pylint pyyaml || \
+    echo "Warning: could not install Python linting tools; Python linting steps below may be skipped."
+fi
 
 # Install global npm packages for JavaScript/TypeScript and Solidity linting
 # Note: Global install is used here for simplicity, but project-local installs are generally preferred.
+# Non-fatal: some environments don't allow global npm installs without sudo.
 echo "----------------------------------------"
 echo "Installing/Updating JavaScript and Solidity linting tools (global install)..."
-npm install -g eslint prettier solhint
+npm install -g eslint prettier solhint || \
+  echo "Warning: could not install JS/Solidity linting tools globally; related steps below may be skipped."
 
 # Define directories to process relative to the project root (one level up from the script)
-PROJECT_ROOT="$(dirname "$0")/.."
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 PYTHON_DIRECTORIES=(
   "code/backend"
-  "code/quantitative"
+  "code/ai_models"
 )
 
 JS_DIRECTORIES=(
-  "code/frontend"
+  "web-frontend"
+  "mobile-frontend"
   "code/blockchain"
 )
 
@@ -154,7 +164,7 @@ for dir in "${PYTHON_DIRECTORIES[@]}"; do
   if [ -d "$dir" ]; then
     echo "Linting Python files in $dir with pylint..."
     # Simplified pylint command, relying on a potential .pylintrc or project configuration
-    find "$dir" -type f -name "*.py" | xargs python3 -m pylint || echo "Pylint found issues in $dir. Please review the above warnings/errors."
+    find "$dir" -type f -name "*.py" -not -path "*/venv/*" -not -path "*/.venv/*" -not -path "*/__pycache__/*" -print0 | xargs -r -0 python3 -m pylint || echo "Pylint found issues in $dir. Please review the above warnings/errors."
   else
     echo "Directory $dir not found. Skipping pylint for this directory."
   fi
@@ -193,6 +203,9 @@ echo "Prettier formatting completed."
 # 3. Solidity Linting
 echo "----------------------------------------"
 echo "Running Solidity linting tools..."
+if [ "$SOLC_AVAILABLE" != true ]; then
+  echo "Note: solc was not found, so solhint/prettier will run in syntax-only mode (no compiler-backed checks)."
+fi
 
 # 3.1 Run solhint
 echo "Running solhint for Solidity files..."

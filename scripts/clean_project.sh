@@ -13,9 +13,16 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Determine the project root (one level up from the script)
-PROJECT_ROOT="$(dirname "$0")/.."
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo -e "${BLUE}Starting Optionix project cleanup...${NC}"
+
+# Report failures in red instead of bash's raw error output if any step below
+# fails unexpectedly (e.g. permission-denied on rm -rf).
+on_error() {
+  echo -e "${RED}Cleanup failed while removing something above. Check permissions and try again.${NC}"
+}
+trap on_error ERR
 
 # Change to project root
 cd "$PROJECT_ROOT"
@@ -32,13 +39,22 @@ fi
 # --- 2. Remove Node.js Dependencies (node_modules) ---
 echo -e "\n${BLUE}2. Removing Node.js Dependencies (node_modules)...${NC}"
 
-# Frontend
+# Web frontend
 FRONTEND_DIR="web-frontend"
 if [ -d "$FRONTEND_DIR/node_modules" ]; then
     rm -rf "$FRONTEND_DIR/node_modules"
     echo -e "${GREEN}Removed $FRONTEND_DIR/node_modules.${NC}"
 else
     echo -e "${BLUE}$FRONTEND_DIR/node_modules not found. Skipping.${NC}"
+fi
+
+# Mobile frontend
+MOBILE_DIR="mobile-frontend"
+if [ -d "$MOBILE_DIR/node_modules" ]; then
+    rm -rf "$MOBILE_DIR/node_modules"
+    echo -e "${GREEN}Removed $MOBILE_DIR/node_modules.${NC}"
+else
+    echo -e "${BLUE}$MOBILE_DIR/node_modules not found. Skipping.${NC}"
 fi
 
 # Blockchain
@@ -53,7 +69,7 @@ fi
 # --- 3. Remove Build Artifacts ---
 echo -e "\n${BLUE}3. Removing Build Artifacts...${NC}"
 
-# Frontend build output (assuming 'dist' or 'build')
+# Web frontend build output (assuming 'dist' or 'build')
 if [ -d "$FRONTEND_DIR/dist" ]; then
     rm -rf "$FRONTEND_DIR/dist"
     echo -e "${GREEN}Removed $FRONTEND_DIR/dist.${NC}"
@@ -61,6 +77,16 @@ fi
 if [ -d "$FRONTEND_DIR/build" ]; then
     rm -rf "$FRONTEND_DIR/build"
     echo -e "${GREEN}Removed $FRONTEND_DIR/build.${NC}"
+fi
+
+# Mobile frontend build/cache output (Expo)
+if [ -d "$MOBILE_DIR/.expo" ]; then
+    rm -rf "$MOBILE_DIR/.expo"
+    echo -e "${GREEN}Removed $MOBILE_DIR/.expo.${NC}"
+fi
+if [ -d "$MOBILE_DIR/dist" ]; then
+    rm -rf "$MOBILE_DIR/dist"
+    echo -e "${GREEN}Removed $MOBILE_DIR/dist.${NC}"
 fi
 
 # Blockchain artifacts (e.g., Hardhat/Truffle artifacts)
@@ -73,8 +99,13 @@ if [ -d "$BLOCKCHAIN_DIR/cache" ]; then
     echo -e "${GREEN}Removed $BLOCKCHAIN_DIR/cache.${NC}"
 fi
 
-# --- 4. Remove Configuration Files Created by Linting Script ---
-echo -e "\n${BLUE}4. Removing generated configuration files...${NC}"
+# --- 4. Remove Python bytecode/test caches ---
+echo -e "\n${BLUE}4. Removing Python bytecode and test caches...${NC}"
+find code/backend -type d \( -name "__pycache__" -o -name ".pytest_cache" \) -prune -exec rm -rf {} + 2>/dev/null || true
+echo -e "${GREEN}Removed __pycache__/.pytest_cache directories under code/backend.${NC}"
+
+# --- 5. Remove Configuration Files Created by Linting Script ---
+echo -e "\n${BLUE}5. Removing generated configuration files...${NC}"
 CONFIG_FILES=(".eslintrc.js" ".prettierrc.json" ".solhint.json")
 for file in "${CONFIG_FILES[@]}"; do
     if [ -f "$file" ]; then

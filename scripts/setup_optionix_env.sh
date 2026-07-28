@@ -17,7 +17,7 @@ NC='\033[0m' # No Color
 echo -e "${BLUE}Starting Optionix project setup...${NC}"
 
 # Determine the project root (one level up from the script)
-PROJECT_ROOT="$(dirname "$0")/.."
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Change to project root
 cd "$PROJECT_ROOT"
@@ -101,9 +101,31 @@ else
     cd "$PROJECT_ROOT" # Return to the main project directory
 fi
 
+# --- Mobile Frontend Setup (React Native/Expo) ---
+echo -e "\n${BLUE}Setting up Optionix Mobile Frontend...${NC}"
+MOBILE_DIR="mobile-frontend"
+
+if [ ! -d "$MOBILE_DIR" ]; then
+    echo -e "${RED}Error: Mobile frontend directory $MOBILE_DIR not found. Skipping mobile setup.${NC}"
+else
+    cd "$MOBILE_DIR"
+    echo -e "${BLUE}Changed directory to $(pwd) for mobile setup.${NC}"
+
+    MOBILE_PACKAGE_FILE="package.json"
+    if [ ! -f "$MOBILE_PACKAGE_FILE" ]; then
+        echo -e "${RED}Error: $MOBILE_PACKAGE_FILE not found in $MOBILE_DIR. Cannot install mobile dependencies.${NC}"
+    else
+        echo -e "${BLUE}Installing mobile Node.js dependencies using npm...${NC}"
+        npm install
+        echo -e "${GREEN}Mobile dependencies installed.${NC}"
+    fi
+
+    cd "$PROJECT_ROOT" # Return to the main project directory
+fi
+
 # --- AI Models & Blockchain components (Placeholder) ---
 echo -e "\n${BLUE}Notes on other components (AI Models, Blockchain):${NC}"
-AI_MODELS_DIR="code/quantitative" # Assuming quantitative is the AI models part
+AI_MODELS_DIR="code/ai_models"
 BLOCKCHAIN_DIR="code/blockchain"
 
 if [ -d "$AI_MODELS_DIR" ]; then

@@ -26,7 +26,7 @@ frontend:
     repository: registry.example.com/app/frontend
     tag: stable
     pullPolicy: Always
-  containerPort: 80
+  containerPort: 3000
   servicePort: 80
   apiUrl: /api
   service:
@@ -92,7 +92,12 @@ logLevel: info
 imagePullSecrets: regcred
 namespace: optionix
 monitoring:
+  prometheus:
+    storageClass: standard
+    storage: 50Gi
   grafana:
+    storageClass: standard
+    storage: 10Gi
     adminPassword: CHANGE_ME_GRAFANA_PASSWORD
 logging:
   elasticsearch:

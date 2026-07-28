@@ -6,7 +6,6 @@
 set -euo pipefail
 
 # Configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/var/log/optionix/backup.log"
 BACKUP_BASE_DIR="/opt/optionix/backups"
 S3_BUCKET="${BACKUP_S3_BUCKET:-optionix-backups}"
@@ -37,7 +36,7 @@ check_prerequisites() {
     log "Checking prerequisites..."
 
     # Check required commands
-    for cmd in mysqldump aws gpg tar gzip; do
+    for cmd in mysqldump mysql aws gpg tar gzip; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             error_exit "Required command not found: $cmd"
         fi
@@ -73,7 +72,11 @@ backup_database() {
     local encrypted_file="${compressed_file}.gpg"
 
     # Read database password
-    local db_password=$(cat "$DB_PASSWORD_FILE")
+    local db_password
+    db_password=$(cat "$DB_PASSWORD_FILE") || error_exit "Failed to read database password file: $DB_PASSWORD_FILE"
+    if [ -z "$db_password" ]; then
+        error_exit "Database password file is empty: $DB_PASSWORD_FILE"
+    fi
 
     # Create database dump
     log "Creating database dump..."
@@ -362,7 +365,11 @@ restore_database() {
     fi
 
     # Read database password
-    local db_password=$(cat "$DB_PASSWORD_FILE")
+    local db_password
+    db_password=$(cat "$DB_PASSWORD_FILE") || error_exit "Failed to read database password file: $DB_PASSWORD_FILE"
+    if [ -z "$db_password" ]; then
+        error_exit "Database password file is empty: $DB_PASSWORD_FILE"
+    fi
 
     # Restore database
     log "Restoring database..."
@@ -447,12 +454,27 @@ run_backup() {
     check_prerequisites
 
     local backup_files=()
+    local result
 
-    # Perform backups
-    backup_files+=($(backup_database))
-    backup_files+=($(backup_application_data))
-    backup_files+=($(backup_configuration))
-    backup_files+=($(backup_kubernetes))
+    # Perform backups. Each backup_* function prints exactly one path to
+    # stdout (its `log` calls all go to stderr) - capture that directly
+    # into a plain variable rather than word-splitting/glob-expanding an
+    # unquoted command substitution into the array (the previous
+    # `backup_files+=($(...))` form would break on any backup path
+    # containing a space or a glob character).
+    result=$(backup_database)
+    backup_files+=("$result")
+
+    result=$(backup_application_data)
+    backup_files+=("$result")
+
+    result=$(backup_configuration)
+    backup_files+=("$result")
+
+    result=$(backup_kubernetes)
+    if [ -n "$result" ]; then
+        backup_files+=("$result")
+    fi
 
     # Test backup integrity
     test_backup_integrity
@@ -474,12 +496,16 @@ main() {
             run_backup
             ;;
         restore-db)
-            [ -n "${2:-}" ] || { echo "Usage: $0 restore-db <backup_file>"; exit 1; }; restore_database "$2"
+            [ -n "${2:-}" ] || { echo "Usage: $0 restore-db <backup_file>"; exit 1; }
+            check_prerequisites
+            restore_database "$2"
             ;;
         test)
+            check_prerequisites
             test_backup_integrity
             ;;
         cleanup)
+            check_prerequisites
             cleanup_old_backups
             ;;
         report)

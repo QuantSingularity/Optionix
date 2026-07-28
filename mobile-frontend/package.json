@@ -22,6 +22,7 @@
     "axios": "^1.9.0",
     "expo": "~52.0.46",
     "expo-constants": "~17.0.5",
+    "expo-modules-core": "~2.2.3",
     "expo-status-bar": "~2.0.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",

@@ -1,236 +1,300 @@
+import { useCallback, useEffect, useState } from "react";
 import {
-  FiAlertTriangle,
+  FiActivity,
+  FiBarChart2,
   FiPieChart,
-  FiTrendingDown,
+  FiShield,
   FiTrendingUp,
 } from "react-icons/fi";
-import styled from "styled-components";
-import PerformanceChart from "../components/portfolio/PerformanceChart";
-import PortfolioAllocation from "../components/portfolio/PortfolioAllocation";
-// Components
-import PositionsList from "../components/portfolio/PositionsList";
-import RiskAssessment from "../components/portfolio/RiskAssessment";
+import CreateAccountPrompt from "../components/common/CreateAccountPrompt";
+import { CHART_PALETTE, ThemedDoughnut } from "../components/common/Charts";
+import {
+  Alert,
+  Card,
+  CardHeader,
+  CardTitle,
+  CenteredSpinner,
+  EmptyState,
+  Grid,
+  PageHeader,
+  PageSubtitle,
+  PageTitle,
+  PageWrap,
+  Segmented,
+  SegmentedBtn,
+  StatCard,
+  StatLabel,
+  StatValue,
+  Table,
+  TableScroll,
+} from "../components/common/UI";
+import portfolioService from "../services/portfolioService";
+import tradingService from "../services/tradingService";
+import { extractErrorMessage } from "../services/apiClient";
+import { formatCurrency, formatPercent } from "../utils/format";
 
-const PortfolioContainer = styled.div`
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: 20px;
-`;
-
-const SummarySection = styled.div`
-  grid-column: span 12;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-
-  @media (max-width: ${(props) => props.theme.breakpoints.tablet}) {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  @media (max-width: ${(props) => props.theme.breakpoints.mobile}) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const SummaryCard = styled.div`
-  background-color: ${(props) => props.theme.colors.cardBg};
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  border: 1px solid ${(props) => props.theme.colors.border};
-  display: flex;
-  flex-direction: column;
-`;
-
-const SummaryHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-`;
-
-const SummaryTitle = styled.h3`
-  font-size: 14px;
-  font-weight: 500;
-  color: ${(props) => props.theme.colors.textSecondary};
-  margin: 0;
-`;
-
-const SummaryIcon = styled.div`
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background-color: ${(props) => props.color || props.theme.colors.primary};
-  opacity: 0.1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  svg {
-    color: ${(props) => props.color || props.theme.colors.primary};
-    font-size: 20px;
-    opacity: 10;
-  }
-`;
-
-const SummaryValue = styled.div`
-  font-size: 24px;
-  font-weight: 700;
-  color: ${(props) => props.theme.colors.textPrimary};
-  margin-bottom: 4px;
-`;
-
-const SummaryChange = styled.div`
-  font-size: 12px;
-  color: ${(props) =>
-    props.isPositive ? props.theme.colors.success : props.theme.colors.danger};
-  display: flex;
-  align-items: center;
-
-  svg {
-    margin-right: 4px;
-  }
-`;
-
-const PositionsSection = styled.div`
-  grid-column: span 8;
-  background-color: ${(props) => props.theme.colors.cardBg};
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  border: 1px solid ${(props) => props.theme.colors.border};
-
-  @media (max-width: ${(props) => props.theme.breakpoints.tablet}) {
-    grid-column: span 12;
-  }
-`;
-
-const AllocationSection = styled.div`
-  grid-column: span 4;
-  background-color: ${(props) => props.theme.colors.cardBg};
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  border: 1px solid ${(props) => props.theme.colors.border};
-
-  @media (max-width: ${(props) => props.theme.breakpoints.tablet}) {
-    grid-column: span 12;
-  }
-`;
-
-const PerformanceSection = styled.div`
-  grid-column: span 8;
-  background-color: ${(props) => props.theme.colors.cardBg};
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  border: 1px solid ${(props) => props.theme.colors.border};
-
-  @media (max-width: ${(props) => props.theme.breakpoints.tablet}) {
-    grid-column: span 12;
-  }
-`;
-
-const RiskSection = styled.div`
-  grid-column: span 4;
-  background-color: ${(props) => props.theme.colors.cardBg};
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  border: 1px solid ${(props) => props.theme.colors.border};
-
-  @media (max-width: ${(props) => props.theme.breakpoints.tablet}) {
-    grid-column: span 12;
-  }
-`;
-
-const CardTitle = styled.h2`
-  font-size: 18px;
-  font-weight: 600;
-  color: ${(props) => props.theme.colors.textPrimary};
-  margin: 0 0 20px 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-`;
+const PERIODS = [7, 30, 90];
 
 const Portfolio = () => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [hasAccount, setHasAccount] = useState(true);
+
+  const [overview, setOverview] = useState(null);
+  const [allocation, setAllocation] = useState(null);
+  const [performance, setPerformance] = useState(null);
+  const [riskMetrics, setRiskMetrics] = useState(null);
+  const [greeks, setGreeks] = useState(null);
+  const [period, setPeriod] = useState(30);
+
+  const loadAll = useCallback(async () => {
+    setIsLoading(true);
+    setError("");
+    try {
+      const accounts = await tradingService.listAccounts();
+      if (accounts.length === 0) {
+        setHasAccount(false);
+        return;
+      }
+      setHasAccount(true);
+      const [ov, alloc, perf, risk, gk] = await Promise.all([
+        portfolioService.getOverview(),
+        portfolioService.getAllocation(),
+        portfolioService.getPerformance(period),
+        portfolioService.getRiskMetrics(),
+        portfolioService.getGreeksSummary(),
+      ]);
+      setOverview(ov);
+      setAllocation(alloc);
+      setPerformance(perf);
+      setRiskMetrics(risk);
+      setGreeks(gk);
+    } catch (err) {
+      setError(extractErrorMessage(err, "Couldn't load portfolio data."));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [period]);
+
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
+  if (isLoading) {
+    return (
+      <PageWrap>
+        <CenteredSpinner $minHeight="60vh" />
+      </PageWrap>
+    );
+  }
+
+  if (!hasAccount) {
+    return (
+      <PageWrap>
+        <PageHeader>
+          <div>
+            <PageTitle>Portfolio</PageTitle>
+            <PageSubtitle>
+              Allocation, performance, and risk in one place.
+            </PageSubtitle>
+          </div>
+        </PageHeader>
+        <CreateAccountPrompt onCreated={loadAll} />
+      </PageWrap>
+    );
+  }
+
+  const doughnutData =
+    allocation?.allocations?.length > 0
+      ? {
+          labels: allocation.allocations.map((a) => a.symbol),
+          datasets: [
+            {
+              data: allocation.allocations.map((a) => Number(a.weight_pct)),
+              backgroundColor: CHART_PALETTE,
+              borderWidth: 0,
+            },
+          ],
+        }
+      : null;
+
   return (
-    <PortfolioContainer>
-      <SummarySection>
-        <SummaryCard>
-          <SummaryHeader>
-            <SummaryTitle>Total Value</SummaryTitle>
-            <SummaryIcon color="#2962ff">
+    <PageWrap>
+      <PageHeader>
+        <div>
+          <PageTitle>Portfolio</PageTitle>
+          <PageSubtitle>
+            Allocation, performance, and risk in one place.
+          </PageSubtitle>
+        </div>
+      </PageHeader>
+
+      {error && <Alert $tone="danger">{error}</Alert>}
+
+      <Grid $cols={4} style={{ marginBottom: 20 }}>
+        <StatCard>
+          <StatLabel>Total Equity</StatLabel>
+          <StatValue>{formatCurrency(overview?.total_equity || 0)}</StatValue>
+        </StatCard>
+        <StatCard>
+          <StatLabel>Unrealized P&amp;L</StatLabel>
+          <StatValue>
+            {formatCurrency(overview?.total_unrealised_pnl || 0)}
+          </StatValue>
+        </StatCard>
+        <StatCard>
+          <StatLabel>VaR (95%)</StatLabel>
+          <StatValue>{formatCurrency(riskMetrics?.var_95 || 0)}</StatValue>
+        </StatCard>
+        <StatCard>
+          <StatLabel>CVaR (95%)</StatLabel>
+          <StatValue>{formatCurrency(riskMetrics?.cvar_95 || 0)}</StatValue>
+        </StatCard>
+      </Grid>
+
+      <Grid $cols={3} style={{ marginBottom: 20, alignItems: "start" }}>
+        <Card style={{ gridColumn: "span 2" }}>
+          <CardHeader>
+            <CardTitle>
+              <FiPieChart /> Allocation
+            </CardTitle>
+          </CardHeader>
+          {doughnutData ? (
+            <Grid $cols={2}>
+              <ThemedDoughnut data={doughnutData} height={220} />
+              <TableScroll>
+                <Table>
+                  <thead>
+                    <tr>
+                      <th>Symbol</th>
+                      <th>Exposure</th>
+                      <th>Weight</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allocation.allocations.map((a) => (
+                      <tr key={a.symbol}>
+                        <td>{a.symbol}</td>
+                        <td>{formatCurrency(a.exposure)}</td>
+                        <td>{formatPercent(a.weight_pct)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </TableScroll>
+            </Grid>
+          ) : (
+            <EmptyState>
               <FiPieChart />
-            </SummaryIcon>
-          </SummaryHeader>
-          <SummaryValue>$24,875.65</SummaryValue>
-          <SummaryChange isPositive={true}>
-            <FiTrendingUp /> +5.27% today
-          </SummaryChange>
-        </SummaryCard>
+              <h4>No open positions</h4>
+              <p>Your allocation breakdown appears once you hold a position.</p>
+            </EmptyState>
+          )}
+        </Card>
 
-        <SummaryCard>
-          <SummaryHeader>
-            <SummaryTitle>Profit/Loss</SummaryTitle>
-            <SummaryIcon color="#26a69a">
-              <FiTrendingUp />
-            </SummaryIcon>
-          </SummaryHeader>
-          <SummaryValue>$1,243.89</SummaryValue>
-          <SummaryChange isPositive={true}>
-            <FiTrendingUp /> +12.3% this week
-          </SummaryChange>
-        </SummaryCard>
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <FiBarChart2 /> Net Greeks
+            </CardTitle>
+          </CardHeader>
+          {greeks && Number(greeks.open_positions) > 0 ? (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 14,
+              }}
+            >
+              {Object.entries(greeks.net_greeks).map(([k, v]) => (
+                <div key={k}>
+                  <StatLabel style={{ marginBottom: 4 }}>{k}</StatLabel>
+                  <StatValue style={{ fontSize: 16 }}>
+                    {Number(v).toFixed(4)}
+                  </StatValue>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState>
+              <FiBarChart2 />
+              <h4>No Greeks yet</h4>
+              <p>Open a position to see portfolio sensitivity.</p>
+            </EmptyState>
+          )}
+        </Card>
+      </Grid>
 
-        <SummaryCard>
-          <SummaryHeader>
-            <SummaryTitle>Margin Used</SummaryTitle>
-            <SummaryIcon color="#ff6d00">
-              <FiTrendingDown />
-            </SummaryIcon>
-          </SummaryHeader>
-          <SummaryValue>$5,120.00</SummaryValue>
-          <SummaryChange isPositive={false}>
-            <FiTrendingDown /> -2.5% available
-          </SummaryChange>
-        </SummaryCard>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <FiTrendingUp /> Trading Performance
+          </CardTitle>
+          <Segmented>
+            {PERIODS.map((p) => (
+              <SegmentedBtn
+                key={p}
+                type="button"
+                $active={period === p}
+                onClick={() => setPeriod(p)}
+              >
+                {p}d
+              </SegmentedBtn>
+            ))}
+          </Segmented>
+        </CardHeader>
 
-        <SummaryCard>
-          <SummaryHeader>
-            <SummaryTitle>Risk Level</SummaryTitle>
-            <SummaryIcon color="#ef5350">
-              <FiAlertTriangle />
-            </SummaryIcon>
-          </SummaryHeader>
-          <SummaryValue>Medium</SummaryValue>
-          <SummaryChange isPositive={false}>
-            <FiTrendingUp /> +2.1% since yesterday
-          </SummaryChange>
-        </SummaryCard>
-      </SummarySection>
+        {performance && performance.total_trades > 0 ? (
+          <Grid $cols={4}>
+            <div>
+              <StatLabel>Trades</StatLabel>
+              <StatValue style={{ fontSize: 18 }}>
+                {performance.total_trades}
+              </StatValue>
+            </div>
+            <div>
+              <StatLabel>Net P&amp;L</StatLabel>
+              <StatValue style={{ fontSize: 18 }}>
+                {formatCurrency(performance.total_pnl)}
+              </StatValue>
+            </div>
+            <div>
+              <StatLabel>Fees Paid</StatLabel>
+              <StatValue style={{ fontSize: 18 }}>
+                {formatCurrency(performance.total_fees || 0)}
+              </StatValue>
+            </div>
+            <div>
+              <StatLabel>Avg Trade Value</StatLabel>
+              <StatValue style={{ fontSize: 18 }}>
+                {formatCurrency(performance.avg_trade_value)}
+              </StatValue>
+            </div>
+          </Grid>
+        ) : (
+          <EmptyState>
+            <FiActivity />
+            <h4>No trades in this window</h4>
+            <p>Execute an order to start tracking performance over time.</p>
+          </EmptyState>
+        )}
+      </Card>
 
-      <PositionsSection>
-        <CardTitle>Open Positions</CardTitle>
-        <PositionsList />
-      </PositionsSection>
-
-      <AllocationSection>
-        <CardTitle>Portfolio Allocation</CardTitle>
-        <PortfolioAllocation />
-      </AllocationSection>
-
-      <PerformanceSection>
-        <CardTitle>Performance History</CardTitle>
-        <PerformanceChart />
-      </PerformanceSection>
-
-      <RiskSection>
-        <CardTitle>Risk Assessment</CardTitle>
-        <RiskAssessment />
-      </RiskSection>
-    </PortfolioContainer>
+      {riskMetrics?.methodology && (
+        <div
+          style={{
+            marginTop: 14,
+            fontSize: 12.5,
+            color: "var(--text-secondary)",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          <FiShield /> Risk figures computed via {riskMetrics.methodology}.
+        </div>
+      )}
+    </PageWrap>
   );
 };
 

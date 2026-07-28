@@ -18,6 +18,11 @@ cryptography==43.0.3
 # Database
 sqlalchemy==2.0.36
 alembic==1.13.3
+# PyMySQL is the driver every infrastructure layer already assumes
+# (Ansible installs python3-pymysql at the OS level, docker-compose and
+# Kubernetes wire up MySQL) - SQLAlchemy needs it explicitly for
+# mysql+pymysql:// connection strings.
+pymysql==1.1.1
 
 # Cache / Messaging
 redis==5.1.1

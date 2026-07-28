@@ -12,7 +12,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Determine the project root (one level up from the script)
-PROJECT_ROOT="$(dirname "$0")/.."
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BACKEND_DIR="$PROJECT_ROOT/code/backend"
 VENV_DIR="$PROJECT_ROOT/venv"
 BACKEND_PORT=8000
@@ -33,13 +33,38 @@ source "$VENV_DIR/bin/activate"
 
 # Start the backend server in the background
 # Use uvicorn directly
-uvicorn app:app --host 0.0.0.0 --port "$BACKEND_PORT" &
+uvicorn app.main:app --host 0.0.0.0 --port "$BACKEND_PORT" &
 BACKEND_PID=$!
 echo -e "${GREEN}Backend started with PID: ${BACKEND_PID}${NC}"
 
-# Wait for backend to start
+# Make sure the backend is always stopped, even if a test below fails and
+# `set -e` exits the script early — otherwise BACKEND_PID leaks as an
+# orphaned background process.
+cleanup() {
+  if kill -0 "$BACKEND_PID" 2>/dev/null; then
+    echo -e "\n${BLUE}Stopping backend server (PID: $BACKEND_PID)...${NC}"
+    kill "$BACKEND_PID" 2>/dev/null || true
+    wait "$BACKEND_PID" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT INT TERM
+
+# Wait for the backend to actually be ready instead of guessing a fixed
+# sleep duration (which can flake on slower first-boot imports).
 echo -e "${BLUE}Waiting for backend to initialize...${NC}"
-sleep 5
+READY=false
+for _attempt in $(seq 1 30); do
+  if curl -s -o /dev/null "$BACKEND_URL/health"; then
+    READY=true
+    break
+  fi
+  sleep 1
+done
+
+if [ "$READY" != true ]; then
+  echo -e "${RED}Error: Backend did not become ready within 30 seconds.${NC}"
+  exit 1
+fi
 
 # --- Test backend endpoints ---
 echo -e "\n${BLUE}Testing backend endpoints...${NC}"
@@ -47,7 +72,7 @@ TEST_FAILURES=0
 
 # 1. Testing root endpoint
 echo -e "${BLUE}1. Testing root endpoint ($BACKEND_URL/)...${NC}"
-RESPONSE=$(curl -s "$BACKEND_URL/")
+RESPONSE=$(curl -s "$BACKEND_URL/" || true)
 if echo "$RESPONSE" | grep -q "Welcome to Optionix API"; then
   echo -e "${GREEN}PASS: Root endpoint returned expected welcome message.${NC}"
 else
@@ -56,27 +81,22 @@ else
 fi
 
 # 2. Testing volatility prediction endpoint
-echo -e "${BLUE}2. Testing volatility prediction endpoint ($BACKEND_URL/predict_volatility)...${NC}"
-PREDICTION_DATA='{"open": 42500, "high": 43000, "low": 42000, "volume": 1000000}'
-RESPONSE=$(curl -s -X POST "$BACKEND_URL/predict_volatility" \
+# Real route is POST /market/volatility (not /predict_volatility) and
+# requires a "symbol" field.
+echo -e "${BLUE}2. Testing volatility prediction endpoint ($BACKEND_URL/market/volatility)...${NC}"
+PREDICTION_DATA='{"symbol": "BTC-USD", "open": 42500, "high": 43000, "low": 42000, "volume": 1000000}'
+RESPONSE=$(curl -s -X POST "$BACKEND_URL/market/volatility" \
   -H "Content-Type: application/json" \
-  -d "$PREDICTION_DATA")
+  -d "$PREDICTION_DATA" || true)
 
-# Simple check for a valid JSON response structure (e.g., contains "prediction")
-if echo "$RESPONSE" | grep -q "prediction"; then
+# The response contains a "volatility" field with the predicted value.
+if echo "$RESPONSE" | grep -q "volatility"; then
   echo -e "${GREEN}PASS: Volatility prediction endpoint returned a prediction.${NC}"
   echo "Response: $RESPONSE"
 else
   echo -e "${RED}FAIL: Volatility prediction endpoint test failed. Response: $RESPONSE${NC}"
   TEST_FAILURES=$((TEST_FAILURES + 1))
 fi
-
-# --- Cleanup ---
-echo -e "\n${BLUE}Stopping backend server (PID: $BACKEND_PID)...${NC}"
-kill "$BACKEND_PID"
-
-# Deactivate venv
-deactivate
 
 # --- Final Result ---
 if [ "$TEST_FAILURES" -eq 0 ]; then

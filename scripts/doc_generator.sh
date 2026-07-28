@@ -14,6 +14,10 @@ NC='\033[0m' # No Color
 # Default values
 OUTPUT_DIR="./docs/generated"
 CODE_DIR="./code"
+# web-frontend and mobile-frontend live at the project root, as siblings of
+# code/ (which only contains backend/ai_models/blockchain) — NOT under code/.
+WEB_FRONTEND_DIR="./web-frontend"
+MOBILE_FRONTEND_DIR="./mobile-frontend"
 INCLUDE_PRIVATE=false
 
 # Function to check if a command exists
@@ -56,6 +60,14 @@ parse_args() {
         CODE_DIR="${1#*=}"
         shift
         ;;
+      --web-frontend-dir=*)
+        WEB_FRONTEND_DIR="${1#*=}"
+        shift
+        ;;
+      --mobile-frontend-dir=*)
+        MOBILE_FRONTEND_DIR="${1#*=}"
+        shift
+        ;;
       --include-private)
         INCLUDE_PRIVATE=true
         shift
@@ -71,10 +83,12 @@ parse_args() {
         echo "  all         Generate all documentation"
         echo
         echo "Options:"
-        echo "  --output-dir=DIR      Output directory for documentation (default: ./docs/generated)"
-        echo "  --code-dir=DIR        Source code directory (default: ./code)"
-        echo "  --include-private     Include private methods and properties (default: false)"
-        echo "  --help                Show this help message"
+        echo "  --output-dir=DIR         Output directory for documentation (default: ./docs/generated)"
+        echo "  --code-dir=DIR           Backend/AI/blockchain source directory (default: ./code)"
+        echo "  --web-frontend-dir=DIR   Web frontend source directory (default: ./web-frontend)"
+        echo "  --mobile-frontend-dir=DIR Mobile frontend source directory (default: ./mobile-frontend)"
+        echo "  --include-private        Include private methods and properties (default: false)"
+        echo "  --help                   Show this help message"
         exit 0
         ;;
       api|components|project|changelog|all)
@@ -108,22 +122,29 @@ check_requirements() {
   case $COMMAND in
     api)
       if [ -d "$CODE_DIR/backend" ]; then
-        if command_exists pydoc; then
-          step_success "pydoc is installed"
+        # Python API docs below are generated via plain grep/sed docstring
+        # parsing, not pydoc, so this only needs python3 itself to exist
+        # (and even that isn't strictly required by the parsing logic) —
+        # it's a lightweight sanity check, not a hard blocker.
+        if command_exists python3; then
+          step_success "python3 is installed"
         else
-          step_error "pydoc is required but not installed" "exit"
+          step_info "python3 not found; Python API docs will still be generated via text parsing"
         fi
       fi
 
-      if [ -d "$CODE_DIR/web-frontend" ]; then
+      if [ -d "$WEB_FRONTEND_DIR" ]; then
         if command_exists jsdoc; then
           step_success "jsdoc is installed"
         else
           step_error "jsdoc is not installed"
           step_info "Installing jsdoc..."
           if command_exists npm; then
-            npm install -g jsdoc
-            step_success "jsdoc installed"
+            if npm install -g jsdoc; then
+              step_success "jsdoc installed"
+            else
+              step_error "Could not install jsdoc (permission issue?); JS API docs will be skipped"
+            fi
           else
             step_error "npm is required to install jsdoc" "exit"
           fi
@@ -131,19 +152,25 @@ check_requirements() {
       fi
       ;;
     components)
-      if [ -d "$CODE_DIR/web-frontend" ]; then
+      if [ -d "$WEB_FRONTEND_DIR" ]; then
         if command_exists react-docgen; then
           step_success "react-docgen is installed"
         else
           step_error "react-docgen is not installed"
           step_info "Installing react-docgen..."
           if command_exists npm; then
-            npm install -g react-docgen
-            step_success "react-docgen installed"
+            if npm install -g react-docgen; then
+              step_success "react-docgen installed"
+            else
+              step_error "Could not install react-docgen (permission issue?); component docs will use fallback extraction"
+            fi
           else
             step_error "npm is required to install react-docgen" "exit"
           fi
         fi
+      fi
+      if [ -d "$MOBILE_FRONTEND_DIR" ]; then
+        step_success "Mobile frontend found at $MOBILE_FRONTEND_DIR (screens documented via fallback extraction)"
       fi
       ;;
     project|all)
@@ -178,7 +205,7 @@ generate_api_docs() {
     mkdir -p "$PYTHON_API_DIR"
 
     # Find all Python files
-    find "$CODE_DIR/backend" -name "*.py" | while read -r py_file; do
+    find "$CODE_DIR/backend" -type f -name "*.py" -not -path "*/venv/*" -not -path "*/.venv/*" -not -path "*/__pycache__/*" | while read -r py_file; do
       rel_path=${py_file#"$CODE_DIR/backend/"}
       module_name=${rel_path%.py}
       module_name=${module_name//\//.}
@@ -191,7 +218,7 @@ generate_api_docs() {
       # Skip private modules if not including private
       if [[ "$INCLUDE_PRIVATE" = false && "$module_name" == _* ]]; then
         continue
-      }
+      fi
 
       step_info "Processing module: $module_name"
 
@@ -229,9 +256,9 @@ generate_api_docs() {
         echo "" >> "$output_file"
 
         # Extract function signature
-        echo "```python" >> "$output_file"
+        echo '```python' >> "$output_file"
         echo "$line_content" >> "$output_file"
-        echo "```" >> "$output_file"
+        echo '```' >> "$output_file"
         echo "" >> "$output_file"
 
         # Extract function docstring
@@ -257,9 +284,9 @@ generate_api_docs() {
         echo "" >> "$output_file"
 
         # Extract class signature
-        echo "```python" >> "$output_file"
+        echo '```python' >> "$output_file"
         echo "$line_content" >> "$output_file"
-        echo "```" >> "$output_file"
+        echo '```' >> "$output_file"
         echo "" >> "$output_file"
 
         # Extract class docstring
@@ -278,7 +305,7 @@ generate_api_docs() {
   fi
 
   # Generate JavaScript API docs
-  if [ -d "$CODE_DIR/web-frontend" ]; then
+  if [ -d "$WEB_FRONTEND_DIR" ]; then
     step_info "Generating JavaScript API documentation..."
 
     JS_API_DIR="$API_DOCS_DIR/javascript"
@@ -288,8 +315,8 @@ generate_api_docs() {
     cat > "$JS_API_DIR/jsdoc.json" << EOF
 {
   "source": {
-    "include": ["$CODE_DIR/web-frontend/src"],
-    "includePattern": ".+\\.js(x)?$",
+    "include": ["$WEB_FRONTEND_DIR/src"],
+    "includePattern": ".+\\\\.js(x)?\$",
     "excludePattern": "(node_modules/|docs)"
   },
   "plugins": ["plugins/markdown"],
@@ -355,15 +382,16 @@ generate_component_docs() {
   mkdir -p "$COMPONENT_DOCS_DIR"
 
   # Generate React component docs
-  if [ -d "$CODE_DIR/web-frontend" ]; then
+  if [ -d "$WEB_FRONTEND_DIR" ]; then
     step_info "Generating React component documentation..."
 
     REACT_COMPONENT_DIR="$COMPONENT_DOCS_DIR/react"
     mkdir -p "$REACT_COMPONENT_DIR"
 
-    # Find all React component files
-    find "$CODE_DIR/web-frontend" -name "*.jsx" -o -name "*.tsx" | while read -r component_file; do
-      rel_path=${component_file#"$CODE_DIR/web-frontend/"}
+    # Find all React component files (this project uses .js for JSX as well
+    # as .jsx/.tsx, and node_modules must never be walked if present)
+    find "$WEB_FRONTEND_DIR/src" -type f \( -name "*.jsx" -o -name "*.tsx" -o -name "*.js" \) -not -path "*/node_modules/*" | while read -r component_file; do
+      rel_path=${component_file#"$WEB_FRONTEND_DIR/"}
       component_name=$(basename "$component_file" | sed 's/\.[^.]*$//')
 
       # Skip private components if not including private
@@ -451,7 +479,8 @@ generate_component_docs() {
               prop_type=${BASH_REMATCH[3]}
 
               # Try to find description from comments
-              prop_desc=$(grep -B 1 "$prop_name[?]\?:" "$component_file" | grep -o "\/\*\*.*\*\/" | sed 's/\/\*\*//' | sed 's/\*\///' | tr -d '*' | tr -d ' ')
+              # shellcheck disable=SC1087  # "[?]" here is a grep BRE character class, not bash array indexing
+            prop_desc=$(grep -B 1 "$prop_name[?]\?:" "$component_file" | grep -o "\/\*\*.*\*\/" | sed 's/\/\*\*//' | sed 's/\*\///' | tr -d '*' | tr -d ' ')
               if [ -z "$prop_desc" ]; then
                 prop_desc="-"
               fi
@@ -469,16 +498,52 @@ generate_component_docs() {
       echo "" >> "$output_file"
       echo "## Example Usage" >> "$output_file"
       echo "" >> "$output_file"
-      echo "```jsx" >> "$output_file"
+      echo '```jsx' >> "$output_file"
       echo "import $component_name from '$rel_path';" >> "$output_file"
       echo "" >> "$output_file"
       echo "function Example() {" >> "$output_file"
       echo "  return <$component_name />;" >> "$output_file"
       echo "}" >> "$output_file"
-      echo "```" >> "$output_file"
+      echo '```' >> "$output_file"
     done
 
     step_success "React component documentation generated: $REACT_COMPONENT_DIR"
+  fi
+
+  # Generate React Native screen docs
+  if [ -d "$MOBILE_FRONTEND_DIR" ]; then
+    step_info "Generating React Native screen documentation..."
+
+    RN_SCREEN_DIR="$COMPONENT_DOCS_DIR/mobile"
+    mkdir -p "$RN_SCREEN_DIR"
+
+    find "$MOBILE_FRONTEND_DIR/src" -type f -name "*.js" -not -path "*/node_modules/*" | while read -r screen_file; do
+      rel_path=${screen_file#"$MOBILE_FRONTEND_DIR/"}
+      screen_name=$(basename "$screen_file" | sed 's/\.[^.]*$//')
+
+      if [[ "$INCLUDE_PRIVATE" = false && "$screen_name" == _* ]]; then
+        continue
+      fi
+
+      step_info "Processing mobile screen/component: $screen_name"
+
+      output_file="$RN_SCREEN_DIR/${screen_name}.md"
+      echo "# $screen_name" > "$output_file"
+      echo "" >> "$output_file"
+      echo "**File:** \`$rel_path\`" >> "$output_file"
+      echo "" >> "$output_file"
+
+      # Extract a leading /** ... */ or // comment block as the description
+      screen_doc=$(grep -A 10 '/\*\*' "$screen_file" 2>/dev/null | sed -n '/\/\*\*/,/\*\//p' | sed 's/\/\*\*//' | sed 's/\*\///' | sed 's/^[ \t*]*//')
+      if [ -n "$screen_doc" ]; then
+        echo "## Description" >> "$output_file"
+        echo "" >> "$output_file"
+        echo "$screen_doc" >> "$output_file"
+        echo "" >> "$output_file"
+      fi
+    done
+
+    step_success "React Native screen documentation generated: $RN_SCREEN_DIR"
   fi
 
   # Create component documentation index
@@ -487,35 +552,36 @@ generate_component_docs() {
 
 This documentation provides details about the Optionix UI components.
 
-## React Components
+## Web (React)
 
-The React component documentation covers the web frontend components.
+The React component documentation covers the web frontend, rooted at
+$WEB_FRONTEND_DIR/src.
 
 - [React Component Documentation](./react/)
 
-## Component Hierarchy
+## Mobile (React Native / Expo)
 
-The following diagram shows the component hierarchy:
+The React Native documentation covers screens and shared components in
+$MOBILE_FRONTEND_DIR/src.
+
+- [Mobile Screen Documentation](./mobile/)
+
+## Web App Structure
 
 \`\`\`
 App
-├── Header
-│   ├── Logo
-│   ├── Navigation
-│   └── UserMenu
-├── Dashboard
-│   ├── PortfolioSummary
-│   ├── MarketOverview
-│   └── RecentActivity
-├── Trading
-│   ├── OptionsChain
-│   ├── StrategyBuilder
-│   └── OrderForm
-├── Analytics
-│   ├── VolatilitySurface
-│   ├── GreeksCalculator
-│   └── PayoffDiagram
-└── Footer
+├── AuthProvider (session/token state)
+└── Routes
+    ├── Home                  (public landing page)
+    ├── SignIn / SignUp       (public auth pages)
+    └── DashboardLayout       (protected, wraps Navbar + Sidebar)
+        ├── Dashboard
+        ├── Trading
+        ├── Portfolio
+        ├── Analytics
+        ├── Risk
+        ├── Compliance
+        └── Settings
 \`\`\`
 
 EOF
@@ -542,10 +608,10 @@ generate_project_docs() {
   echo "" >> "$STRUCTURE_FILE"
   echo "## Directory Structure" >> "$STRUCTURE_FILE"
   echo "" >> "$STRUCTURE_FILE"
-  echo "```" >> "$STRUCTURE_FILE"
+  echo '```' >> "$STRUCTURE_FILE"
 
   # Generate directory tree
-  find . -type d -not -path "*/\.*" -not -path "*/node_modules/*" -not -path "*/venv/*" | sort | while read -r dir; do
+  find . -type d -not -path "*/\.*" -not -path "*/node_modules/*" -not -path "*/venv/*" -not -path "*/__pycache__/*" -not -path "*/dist/*" -not -path "*/build/*" | sort | while read -r dir; do
     # Calculate directory depth
     depth=$(echo "$dir" | tr -cd '/' | wc -c)
 
@@ -554,8 +620,13 @@ generate_project_docs() {
       continue
     fi
 
-    # Add indentation based on depth
-    indent=$(printf '%*s' "$((depth-1))" '' | tr ' ' '│   ')
+    # Add indentation based on depth. 'tr' cannot be used to repeat a
+    # multi-byte UTF-8 character like the box-drawing pipe (it maps
+    # byte-for-byte and mangles it), so build the indent with a loop instead.
+    indent=""
+    for ((_i = 0; _i < depth - 1; _i++)); do
+      indent="${indent}│   "
+    done
     if [ "$depth" -gt 1 ]; then
       echo "$indent├── $(basename "$dir")" >> "$STRUCTURE_FILE"
     else
@@ -563,7 +634,7 @@ generate_project_docs() {
     fi
   done
 
-  echo "```" >> "$STRUCTURE_FILE"
+  echo '```' >> "$STRUCTURE_FILE"
   echo "" >> "$STRUCTURE_FILE"
 
   # Add descriptions for main directories
@@ -571,19 +642,19 @@ generate_project_docs() {
   echo "" >> "$STRUCTURE_FILE"
 
   echo "### code/" >> "$STRUCTURE_FILE"
-  echo "Contains all source code for the Optionix project." >> "$STRUCTURE_FILE"
+  echo "Contains the backend, AI models, and blockchain source code for the Optionix project." >> "$STRUCTURE_FILE"
   echo "" >> "$STRUCTURE_FILE"
 
   echo "### code/backend/" >> "$STRUCTURE_FILE"
   echo "Contains the Python FastAPI backend server code." >> "$STRUCTURE_FILE"
   echo "" >> "$STRUCTURE_FILE"
 
-  echo "### code/web-frontend/" >> "$STRUCTURE_FILE"
-  echo "Contains the React web frontend code." >> "$STRUCTURE_FILE"
+  echo "### web-frontend/" >> "$STRUCTURE_FILE"
+  echo "Contains the React web frontend code (lives at the project root, alongside code/)." >> "$STRUCTURE_FILE"
   echo "" >> "$STRUCTURE_FILE"
 
-  echo "### code/mobile-frontend/" >> "$STRUCTURE_FILE"
-  echo "Contains the React Native mobile app code." >> "$STRUCTURE_FILE"
+  echo "### mobile-frontend/" >> "$STRUCTURE_FILE"
+  echo "Contains the React Native / Expo mobile app code (lives at the project root, alongside code/)." >> "$STRUCTURE_FILE"
   echo "" >> "$STRUCTURE_FILE"
 
   echo "### code/blockchain/" >> "$STRUCTURE_FILE"
@@ -592,10 +663,6 @@ generate_project_docs() {
 
   echo "### code/ai_models/" >> "$STRUCTURE_FILE"
   echo "Contains the machine learning models for volatility prediction and trading signals." >> "$STRUCTURE_FILE"
-  echo "" >> "$STRUCTURE_FILE"
-
-  echo "### code/quantitative/" >> "$STRUCTURE_FILE"
-  echo "Contains the quantitative finance models and algorithms." >> "$STRUCTURE_FILE"
   echo "" >> "$STRUCTURE_FILE"
 
   echo "### docs/" >> "$STRUCTURE_FILE"
@@ -623,7 +690,7 @@ generate_project_docs() {
   echo "" >> "$ARCHITECTURE_FILE"
   echo "Optionix follows a microservices architecture with the following components:" >> "$ARCHITECTURE_FILE"
   echo "" >> "$ARCHITECTURE_FILE"
-  echo "```" >> "$ARCHITECTURE_FILE"
+  echo '```' >> "$ARCHITECTURE_FILE"
   echo "                                 ┌─────────────────┐" >> "$ARCHITECTURE_FILE"
   echo "                                 │    Frontend     │" >> "$ARCHITECTURE_FILE"
   echo "                                 │  (React/Redux)  │" >> "$ARCHITECTURE_FILE"
@@ -648,7 +715,7 @@ generate_project_docs() {
   echo "│   Market Data   │    │    Portfolio    │    │   Time Series   │    │    Ethereum     │" >> "$ARCHITECTURE_FILE"
   echo "│    Database     │    │    Database     │    │    Database     │    │    Blockchain   │" >> "$ARCHITECTURE_FILE"
   echo "└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘" >> "$ARCHITECTURE_FILE"
-  echo "```" >> "$ARCHITECTURE_FILE"
+  echo '```' >> "$ARCHITECTURE_FILE"
   echo "" >> "$ARCHITECTURE_FILE"
 
   echo "## Component Descriptions" >> "$ARCHITECTURE_FILE"
@@ -772,25 +839,25 @@ generate_changelog() {
     # Group commits by type
     echo "### Features" >> "$CHANGELOG_FILE"
     echo "" >> "$CHANGELOG_FILE"
-    git log --pretty=format:"- %s (%h)" | grep -i "feat\|feature\|add" >> "$CHANGELOG_FILE" || echo "No features found."
+    git log --pretty=format:"- %s (%h)" | grep -i "feat\|feature\|add" >> "$CHANGELOG_FILE" || echo "No features found." >> "$CHANGELOG_FILE"
     echo "" >> "$CHANGELOG_FILE"
     echo "" >> "$CHANGELOG_FILE"
 
     echo "### Bug Fixes" >> "$CHANGELOG_FILE"
     echo "" >> "$CHANGELOG_FILE"
-    git log --pretty=format:"- %s (%h)" | grep -i "fix\|bug\|issue" >> "$CHANGELOG_FILE" || echo "No bug fixes found."
+    git log --pretty=format:"- %s (%h)" | grep -i "fix\|bug\|issue" >> "$CHANGELOG_FILE" || echo "No bug fixes found." >> "$CHANGELOG_FILE"
     echo "" >> "$CHANGELOG_FILE"
     echo "" >> "$CHANGELOG_FILE"
 
     echo "### Improvements" >> "$CHANGELOG_FILE"
     echo "" >> "$CHANGELOG_FILE"
-    git log --pretty=format:"- %s (%h)" | grep -i "improve\|enhance\|refactor\|perf" >> "$CHANGELOG_FILE" || echo "No improvements found."
+    git log --pretty=format:"- %s (%h)" | grep -i "improve\|enhance\|refactor\|perf" >> "$CHANGELOG_FILE" || echo "No improvements found." >> "$CHANGELOG_FILE"
     echo "" >> "$CHANGELOG_FILE"
     echo "" >> "$CHANGELOG_FILE"
 
     echo "### Other Changes" >> "$CHANGELOG_FILE"
     echo "" >> "$CHANGELOG_FILE"
-    git log --pretty=format:"- %s (%h)" | grep -v -i "feat\|feature\|add\|fix\|bug\|issue\|improve\|enhance\|refactor\|perf" >> "$CHANGELOG_FILE" || echo "No other changes found."
+    git log --pretty=format:"- %s (%h)" | grep -v -i "feat\|feature\|add\|fix\|bug\|issue\|improve\|enhance\|refactor\|perf" >> "$CHANGELOG_FILE" || echo "No other changes found." >> "$CHANGELOG_FILE"
     echo "" >> "$CHANGELOG_FILE"
   else
     # Generate changelog from tags
@@ -807,19 +874,19 @@ generate_changelog() {
       # Group commits by type
       echo "### Features" >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
-      git log "$latest_tag"..HEAD --pretty=format:"- %s (%h)" | grep -i "feat\|feature\|add" >> "$CHANGELOG_FILE" || echo "No features found."
+      git log "$latest_tag"..HEAD --pretty=format:"- %s (%h)" | grep -i "feat\|feature\|add" >> "$CHANGELOG_FILE" || echo "No features found." >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
 
       echo "### Bug Fixes" >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
-      git log "$latest_tag"..HEAD --pretty=format:"- %s (%h)" | grep -i "fix\|bug\|issue" >> "$CHANGELOG_FILE" || echo "No bug fixes found."
+      git log "$latest_tag"..HEAD --pretty=format:"- %s (%h)" | grep -i "fix\|bug\|issue" >> "$CHANGELOG_FILE" || echo "No bug fixes found." >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
 
       echo "### Improvements" >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
-      git log "$latest_tag"..HEAD --pretty=format:"- %s (%h)" | grep -i "improve\|enhance\|refactor\|perf" >> "$CHANGELOG_FILE" || echo "No improvements found."
+      git log "$latest_tag"..HEAD --pretty=format:"- %s (%h)" | grep -i "improve\|enhance\|refactor\|perf" >> "$CHANGELOG_FILE" || echo "No improvements found." >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
     fi
@@ -844,19 +911,19 @@ generate_changelog() {
       # Group commits by type
       echo "### Features" >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
-      git log "$range" --pretty=format:"- %s (%h)" | grep -i "feat\|feature\|add" >> "$CHANGELOG_FILE" || echo "No features found."
+      git log "$range" --pretty=format:"- %s (%h)" | grep -i "feat\|feature\|add" >> "$CHANGELOG_FILE" || echo "No features found." >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
 
       echo "### Bug Fixes" >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
-      git log "$range" --pretty=format:"- %s (%h)" | grep -i "fix\|bug\|issue" >> "$CHANGELOG_FILE" || echo "No bug fixes found."
+      git log "$range" --pretty=format:"- %s (%h)" | grep -i "fix\|bug\|issue" >> "$CHANGELOG_FILE" || echo "No bug fixes found." >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
 
       echo "### Improvements" >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
-      git log "$range" --pretty=format:"- %s (%h)" | grep -i "improve\|enhance\|refactor\|perf" >> "$CHANGELOG_FILE" || echo "No improvements found."
+      git log "$range" --pretty=format:"- %s (%h)" | grep -i "improve\|enhance\|refactor\|perf" >> "$CHANGELOG_FILE" || echo "No improvements found." >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
 

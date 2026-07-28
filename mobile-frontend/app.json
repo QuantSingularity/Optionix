@@ -1,16 +1,17 @@
 {
   "expo": {
-    "name": "mobile_frontend",
-    "slug": "mobile_frontend",
+    "name": "Optionix",
+    "slug": "optionix-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0b0e17",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0b0e17"
     },
     "ios": {
       "supportsTablet": true
@@ -18,7 +19,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#0b0e17"
       }
     },
     "web": {

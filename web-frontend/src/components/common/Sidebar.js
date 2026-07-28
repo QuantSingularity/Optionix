@@ -1,9 +1,11 @@
 import {
   FiBarChart2,
   FiBriefcase,
+  FiClipboard,
   FiGrid,
   FiLogOut,
   FiSettings,
+  FiShield,
   FiTrendingUp,
 } from "react-icons/fi";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -22,9 +24,19 @@ const Side = styled.aside`
   z-index: 90;
   display: flex;
   flex-direction: column;
-  transition: transform 0.3s ease;
+  transition: transform 0.25s ease;
+  transform: translateX(${(p) => (p.$open ? "0" : "-100%")});
+`;
+
+const Backdrop = styled.div`
+  display: none;
   @media (max-width: ${(p) => p.theme.breakpoints.tablet}) {
-    transform: translateX(${(p) => (p.$open ? "0" : "-100%")});
+    display: ${(p) => (p.$show ? "block" : "none")};
+    position: fixed;
+    inset: 0;
+    top: 70px;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 85;
   }
 `;
 
@@ -105,10 +117,16 @@ const NAV = [
   { icon: <FiTrendingUp />, label: "Trading", path: "/dashboard/trading" },
   { icon: <FiBriefcase />, label: "Portfolio", path: "/dashboard/portfolio" },
   { icon: <FiBarChart2 />, label: "Analytics", path: "/dashboard/analytics" },
+  { icon: <FiShield />, label: "Risk", path: "/dashboard/risk" },
+  {
+    icon: <FiClipboard />,
+    label: "Compliance",
+    path: "/dashboard/compliance",
+  },
   { icon: <FiSettings />, label: "Settings", path: "/dashboard/settings" },
 ];
 
-const Sidebar = ({ isOpen }) => {
+const Sidebar = ({ isOpen, onClose }) => {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -124,24 +142,31 @@ const Sidebar = ({ isOpen }) => {
   };
 
   return (
-    <Side $open={isOpen}>
-      <Logo to="/dashboard">
-        Option<span>ix</span>
-      </Logo>
-      <Nav>
-        {NAV.map((item) => (
-          <NavItem key={item.path} to={item.path} $active={isActive(item.path)}>
-            {item.icon}
-            {item.label}
-          </NavItem>
-        ))}
-      </Nav>
-      <Footer>
-        <LogoutBtn onClick={handleLogout}>
-          <FiLogOut /> Logout
-        </LogoutBtn>
-      </Footer>
-    </Side>
+    <>
+      <Backdrop $show={isOpen} onClick={onClose} />
+      <Side $open={isOpen}>
+        <Logo to="/dashboard">
+          Option<span>ix</span>
+        </Logo>
+        <Nav>
+          {NAV.map((item) => (
+            <NavItem
+              key={item.path}
+              to={item.path}
+              $active={isActive(item.path)}
+            >
+              {item.icon}
+              {item.label}
+            </NavItem>
+          ))}
+        </Nav>
+        <Footer>
+          <LogoutBtn onClick={handleLogout}>
+            <FiLogOut /> Logout
+          </LogoutBtn>
+        </Footer>
+      </Side>
+    </>
   );
 };
 

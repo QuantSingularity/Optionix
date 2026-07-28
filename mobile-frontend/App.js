@@ -1,43 +1,27 @@
 import { NavigationContainer } from "@react-navigation/native";
-import { createStackNavigator } from "@react-navigation/stack";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { ActivityIndicator, StatusBar, StyleSheet, View } from "react-native";
 import { Provider as PaperProvider } from "react-native-paper";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
-import AppNavigator from "./src/navigation/AppNavigator";
-import LoginScreen from "./src/screens/LoginScreen";
-import RegisterScreen from "./src/screens/RegisterScreen";
-
-const Stack = createStackNavigator();
-
-const AuthNavigator = () => {
-  return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Register" component={RegisterScreen} />
-    </Stack.Navigator>
-  );
-};
+import AuthNavigator from "./src/navigation/AuthNavigator";
+import MainNavigator from "./src/navigation/AppNavigator";
+import colors, { navTheme, paperTheme } from "./src/theme";
 
 const AppContent = () => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
-  if (loading) {
+  if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <NavigationContainer>
-      {isAuthenticated ? <AppNavigator /> : <AuthNavigator />}
+    <NavigationContainer theme={navTheme}>
+      {isAuthenticated ? <MainNavigator /> : <AuthNavigator />}
     </NavigationContainer>
   );
 };
@@ -45,7 +29,11 @@ const AppContent = () => {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <PaperProvider>
+      <PaperProvider theme={paperTheme}>
+        <StatusBar
+          barStyle="light-content"
+          backgroundColor={colors.background}
+        />
         <AuthProvider>
           <AppContent />
         </AuthProvider>
@@ -59,5 +47,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: colors.background,
   },
 });

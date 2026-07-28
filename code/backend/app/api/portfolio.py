@@ -12,7 +12,7 @@ import numpy as np
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user
+from ..auth import get_current_active_user
 from ..database import get_db
 from ..models import Account, Position, Trade, User
 from ..services.financial_service import FinancialCalculationService
@@ -25,9 +25,21 @@ _financial_svc = FinancialCalculationService()
 _risk_calc = RiskCalculator()
 
 
+def _user_positions_query(user: User, db: Session):
+    """
+    Positions belong to an Account, not directly to a User, so we join
+    through Account to scope the query to the authenticated user.
+    """
+    return (
+        db.query(Position)
+        .join(Account, Position.account_id == Account.id)
+        .filter(Account.user_id == user.id)
+    )
+
+
 @router.get("/overview")
 async def portfolio_overview(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
@@ -54,9 +66,7 @@ async def portfolio_overview(
     total_margin_used = sum(a.margin_used for a in accounts)
 
     positions = (
-        db.query(Position)
-        .filter(Position.user_id == current_user.id, Position.status == "open")
-        .all()
+        _user_positions_query(current_user, db).filter(Position.status == "open").all()
     )
 
     total_unrealised = sum(p.unrealized_pnl or Decimal("0") for p in positions)
@@ -86,16 +96,14 @@ async def portfolio_overview(
 
 @router.get("/allocation")
 async def portfolio_allocation(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
     Break down open positions by symbol and compute weight in portfolio.
     """
     positions = (
-        db.query(Position)
-        .filter(Position.user_id == current_user.id, Position.status == "open")
-        .all()
+        _user_positions_query(current_user, db).filter(Position.status == "open").all()
     )
 
     if not positions:
@@ -133,7 +141,7 @@ async def portfolio_allocation(
 @router.get("/performance")
 async def portfolio_performance(
     days: int = Query(30, ge=1, le=365),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
@@ -182,7 +190,7 @@ async def portfolio_performance(
 
 @router.get("/risk-metrics")
 async def portfolio_risk_metrics(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
@@ -191,9 +199,7 @@ async def portfolio_risk_metrics(
     Uses Monte Carlo-sampled returns when real price history is unavailable.
     """
     positions = (
-        db.query(Position)
-        .filter(Position.user_id == current_user.id, Position.status == "open")
-        .all()
+        _user_positions_query(current_user, db).filter(Position.status == "open").all()
     )
     if not positions:
         return {"var_95": "0.00", "cvar_95": "0.00", "positions": 0}
@@ -221,16 +227,14 @@ async def portfolio_risk_metrics(
 
 @router.get("/positions/greeks-summary")
 async def greeks_summary(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
     Aggregate net Greeks (Delta, Gamma, Theta, Vega, Rho) across all open positions.
     """
     positions = (
-        db.query(Position)
-        .filter(Position.user_id == current_user.id, Position.status == "open")
-        .all()
+        _user_positions_query(current_user, db).filter(Position.status == "open").all()
     )
 
     net = {

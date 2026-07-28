@@ -156,25 +156,25 @@ run_lint() {
   fi
 
   # Frontend linting
-  if [ -d "code/web-frontend" ]; then
+  if [ -d "web-frontend" ]; then
     step_info "Linting frontend code"
-    cd code/web-frontend
-    if [ -f "package.json" ]; then
+    cd web-frontend
+    if [ -f "package.json" ] && grep -q '"lint"' package.json; then
       npm run lint || step_error "Frontend linting failed"
     else
-      step_info "No package.json found, skipping frontend linting"
+      step_info "No lint script defined in web-frontend/package.json, skipping frontend linting"
     fi
     cd - > /dev/null
   fi
 
   # Mobile linting
-  if [ -d "code/mobile-frontend" ]; then
+  if [ -d "mobile-frontend" ]; then
     step_info "Linting mobile code"
-    cd code/mobile-frontend
-    if [ -f "package.json" ]; then
+    cd mobile-frontend
+    if [ -f "package.json" ] && grep -q '"lint"' package.json; then
       npm run lint || step_error "Mobile linting failed"
     else
-      step_info "No package.json found, skipping mobile linting"
+      step_info "No lint script defined in mobile-frontend/package.json, skipping mobile linting"
     fi
     cd - > /dev/null
   fi
@@ -192,9 +192,9 @@ run_tests() {
   section_header "Running Tests"
 
   # Run the comprehensive test script if it exists
-  if [ -f "./optionix_automation/comprehensive_test.sh" ]; then
+  if [ -f "./scripts/comprehensive_test.sh" ]; then
     step_info "Running comprehensive test suite"
-    bash ./optionix_automation/comprehensive_test.sh
+    bash ./scripts/comprehensive_test.sh
   else
     # Backend tests
     if [ -d "code/backend" ]; then
@@ -205,9 +205,9 @@ run_tests() {
     fi
 
     # Frontend tests
-    if [ -d "code/web-frontend" ]; then
+    if [ -d "web-frontend" ]; then
       step_info "Running frontend tests"
-      cd code/web-frontend
+      cd web-frontend
       if [ -f "package.json" ]; then
         npm test || step_error "Frontend tests failed"
       else
@@ -234,15 +234,19 @@ build_app() {
     step_info "Preparing backend"
     cd code/backend
     if [ -f "requirements.txt" ]; then
-      python -m pip install -r requirements.txt
+      # Modern Debian/Ubuntu (PEP 668) refuses `pip install` outside a venv
+      # unless --break-system-packages is passed; fall back without it for
+      # older pip versions that don't recognize the flag.
+      python -m pip install -r requirements.txt --break-system-packages 2>/dev/null || \
+        python -m pip install -r requirements.txt
     fi
     cd - > /dev/null
   fi
 
   # Frontend build
-  if [ -d "code/web-frontend" ]; then
+  if [ -d "web-frontend" ]; then
     step_info "Building frontend"
-    cd code/web-frontend
+    cd web-frontend
     if [ -f "package.json" ]; then
       npm ci
       npm run build
@@ -253,12 +257,16 @@ build_app() {
   fi
 
   # Mobile build
-  if [ -d "code/mobile-frontend" ] && [ "$ENVIRONMENT" = "production" ]; then
+  if [ -d "mobile-frontend" ] && [ "$ENVIRONMENT" = "production" ]; then
     step_info "Building mobile app"
-    cd code/mobile-frontend
+    cd mobile-frontend
     if [ -f "package.json" ]; then
       npm ci
-      npm run build
+      # Expo/React Native projects don't have a "build" script the way CRA
+      # apps do — `expo export` produces a static bundle, which is the
+      # closest equivalent to a production "build" step in CI.
+      npx expo export --platform web --output-dir dist || \
+        step_error "Mobile build failed"
     else
       step_info "No package.json found, skipping mobile build"
     fi
@@ -296,28 +304,30 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 EOF
       docker build -t optionix-backend:latest code/backend
     fi
 
     # Frontend container
-    if [ -d "code/web-frontend/build" ]; then
-      if [ -f "code/web-frontend/Dockerfile" ]; then
+    # webpack.config.js outputs to dist/, not build/ (that's the
+    # create-react-app convention, which this project doesn't use).
+    if [ -d "web-frontend/dist" ]; then
+      if [ -f "web-frontend/Dockerfile" ]; then
         step_info "Building frontend container"
-        docker build -t optionix-frontend:latest code/web-frontend
+        docker build -t optionix-frontend:latest web-frontend
       else
         step_info "Creating default frontend Dockerfile"
-        cat > code/web-frontend/Dockerfile << EOF
+        cat > web-frontend/Dockerfile << EOF
 FROM nginx:alpine
 
-COPY build/ /usr/share/nginx/html
+COPY dist/ /usr/share/nginx/html
 
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]
 EOF
-        docker build -t optionix-frontend:latest code/web-frontend
+        docker build -t optionix-frontend:latest web-frontend
       fi
     else
       step_info "Frontend build directory not found, skipping container creation"

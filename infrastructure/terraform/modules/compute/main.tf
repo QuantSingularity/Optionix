@@ -85,8 +85,8 @@ resource "aws_lb" "app" {
   enable_deletion_protection = var.environment == "prod" ? true : false
 
   access_logs {
-    bucket  = "${var.app_name}-${var.environment}-alb-logs"
-    enabled = false
+    bucket  = var.alb_logs_bucket_name != "" ? var.alb_logs_bucket_name : "${var.app_name}-${var.environment}-alb-logs"
+    enabled = var.alb_logs_bucket_name != ""
   }
 
   tags = {

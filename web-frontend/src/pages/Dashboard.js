@@ -1,323 +1,300 @@
+import { useCallback, useEffect, useState } from "react";
 import {
   FiActivity,
-  FiArrowDown,
-  FiArrowUp,
-  FiDollarSign,
+  FiArrowDownRight,
+  FiArrowUpRight,
+  FiBarChart2,
+  FiBriefcase,
+  FiClipboard,
   FiPieChart,
+  FiPlus,
+  FiShield,
   FiTrendingUp,
 } from "react-icons/fi";
-import styled, { keyframes } from "styled-components";
-import MarketOverview from "../components/dashboard/MarketOverview";
-import PortfolioSummary from "../components/dashboard/PortfolioSummary";
-import PriceChart from "../components/dashboard/PriceChart";
-import RecentTransactions from "../components/dashboard/RecentTransactions";
+import { Link } from "react-router-dom";
+import CreateAccountPrompt from "../components/common/CreateAccountPrompt";
+import { CHART_PALETTE, ThemedDoughnut } from "../components/common/Charts";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  CardTitle,
+  CenteredSpinner,
+  EmptyState,
+  Grid,
+  PageHeader,
+  PageSubtitle,
+  PageTitle,
+  PageWrap,
+  StatCard,
+  StatDelta,
+  StatLabel,
+  StatValue,
+  Table,
+  TableScroll,
+} from "../components/common/UI";
+import portfolioService from "../services/portfolioService";
+import tradingService from "../services/tradingService";
+import { extractErrorMessage } from "../services/apiClient";
+import { formatCurrency, formatDateTime, formatPercent } from "../utils/format";
 import { useAuth } from "../utils/AuthContext";
 
-const fadeUp = keyframes`from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}`;
-
-const Page = styled.div`
-  animation: ${fadeUp} 0.4s ease both;
-`;
-
-const Header = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 28px;
-  flex-wrap: wrap;
-  gap: 12px;
-`;
-const Greeting = styled.div``;
-const GreetName = styled.h1`
-  font-family: ${(p) => p.theme.fonts.display};
-  font-size: 1.6rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  color: ${(p) => p.theme.colors.textPrimary};
-  margin-bottom: 4px;
-`;
-const GreetSub = styled.p`
-  color: ${(p) => p.theme.colors.textSecondary};
-  font-size: 14px;
-`;
-
-const LiveBadge = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  border-radius: 100px;
-  padding: 6px 14px;
-  font-size: 12.5px;
-  color: #10b981;
-  font-weight: 600;
-`;
-const Dot = styled.span`
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #10b981;
-  animation: pulse 2s infinite;
-  display: inline-block;
-  @keyframes pulse {
-    0%,
-    100% {
-      opacity: 0.5;
-    }
-    50% {
-      opacity: 1;
-    }
-  }
-`;
-
-const Grid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: 20px;
-`;
-
-/* ─── Stat Cards ─────────────────────────────────────────── */
-const StatCard = styled.div`
-  grid-column: span 3;
-  background: ${(p) => p.theme.colors.cardBg};
-  border: 1px solid ${(p) => p.theme.colors.border};
-  border-radius: 14px;
-  padding: 22px;
-  position: relative;
-  overflow: hidden;
-  transition: all 0.25s;
-  &:hover {
-    border-color: ${(p) => p.$accent || p.theme.colors.borderAccent};
-    transform: translateY(-2px);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
-  }
-  &::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: ${(p) => p.$accent || p.theme.colors.primary};
-    opacity: 0.7;
-  }
-  @media (max-width: ${(p) => p.theme.breakpoints.desktop}) {
-    grid-column: span 6;
-  }
-  @media (max-width: ${(p) => p.theme.breakpoints.mobile}) {
-    grid-column: span 12;
-  }
-`;
-const StatTop = styled.div`
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 14px;
-`;
-const StatIcon = styled.div`
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: ${(p) => p.$bg || "rgba(59,130,246,.12)"};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  svg {
-    color: ${(p) => p.$color || "#3b82f6"};
-    font-size: 19px;
-  }
-`;
-const StatLabel = styled.p`
-  font-size: 12px;
-  font-weight: 600;
-  color: ${(p) => p.theme.colors.textSecondary};
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-`;
-const StatValue = styled.div`
-  font-family: ${(p) => p.theme.fonts.display};
-  font-size: 1.75rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  color: ${(p) => p.theme.colors.textPrimary};
-  margin-bottom: 6px;
-`;
-const StatChange = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: ${(p) => (p.$up ? "#10b981" : "#ef4444")};
-  padding: 3px 8px;
-  border-radius: 100px;
-  background: ${(p) => (p.$up ? "rgba(16,185,129,.1)" : "rgba(239,68,68,.1)")};
-`;
-
-/* ─── Content cards ──────────────────────────────────────── */
-const Card = styled.div`
-  background: ${(p) => p.theme.colors.cardBg};
-  border: 1px solid ${(p) => p.theme.colors.border};
-  border-radius: 14px;
-  padding: 24px;
-  grid-column: span ${(p) => p.$span || 12};
-  @media (max-width: ${(p) => p.theme.breakpoints.tablet}) {
-    grid-column: span 12;
-  }
-`;
-const CardHead = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-`;
-const CardTitle = styled.h3`
-  font-family: ${(p) => p.theme.fonts.display};
-  font-size: 1rem;
-  font-weight: 700;
-  color: ${(p) => p.theme.colors.textPrimary};
-`;
-const CardBadge = styled.span`
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: ${(p) => p.$color || p.theme.colors.textSecondary};
-  background: ${(p) => p.$bg || "rgba(255,255,255,.05)"};
-  padding: 3px 10px;
-  border-radius: 100px;
-  border: 1px solid ${(p) => p.$border || "rgba(255,255,255,.08)"};
-`;
-
-const STATS = [
-  {
-    label: "Portfolio Value",
-    value: "$24,875",
-    change: "+5.27%",
-    up: true,
-    icon: <FiDollarSign />,
-    $accent: "#3b82f6",
-    $bg: "rgba(59,130,246,.12)",
-    $color: "#3b82f6",
-  },
-  {
-    label: "Open Positions",
-    value: "12",
-    change: "+2 today",
-    up: true,
-    icon: <FiActivity />,
-    $accent: "#10b981",
-    $bg: "rgba(16,185,129,.12)",
-    $color: "#10b981",
-  },
-  {
-    label: "Profit / Loss",
-    value: "+$1,244",
-    change: "+12.3%",
-    up: true,
-    icon: <FiTrendingUp />,
-    $accent: "#f97316",
-    $bg: "rgba(249,115,22,.12)",
-    $color: "#f97316",
-  },
-  {
-    label: "Portfolio Risk",
-    value: "Medium",
-    change: "+2.1%",
-    up: false,
-    icon: <FiPieChart />,
-    $accent: "#ef4444",
-    $bg: "rgba(239,68,68,.12)",
-    $color: "#ef4444",
-  },
-];
+const STATUS_TONE = {
+  executed: "success",
+  pending: "warning",
+  cancelled: "neutral",
+  rejected: "danger",
+  failed: "danger",
+};
 
 const Dashboard = () => {
   const { user } = useAuth();
-  const firstName = user?.full_name?.split(" ")[0] || "Trader";
-  const hour = new Date().getHours();
-  const greeting =
-    hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [accounts, setAccounts] = useState([]);
+  const [overview, setOverview] = useState(null);
+  const [allocation, setAllocation] = useState(null);
+  const [greeks, setGreeks] = useState(null);
+  const [orders, setOrders] = useState([]);
+
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setError("");
+    try {
+      const accts = await tradingService.listAccounts();
+      setAccounts(accts);
+
+      if (accts.length > 0) {
+        const [ov, alloc, gk, ord] = await Promise.all([
+          portfolioService.getOverview(),
+          portfolioService.getAllocation(),
+          portfolioService.getGreeksSummary(),
+          tradingService.listOrders({ limit: 6 }),
+        ]);
+        setOverview(ov);
+        setAllocation(alloc);
+        setGreeks(gk);
+        setOrders(ord);
+      }
+    } catch (err) {
+      setError(extractErrorMessage(err, "Couldn't load your dashboard."));
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const firstName = user?.full_name?.split(" ")[0] || "there";
+  const hasAccount = accounts.length > 0;
+  const pnl = Number(overview?.total_unrealised_pnl || 0);
+
+  const doughnutData =
+    allocation?.allocations?.length > 0
+      ? {
+          labels: allocation.allocations.map((a) => a.symbol),
+          datasets: [
+            {
+              data: allocation.allocations.map((a) => Number(a.weight_pct)),
+              backgroundColor: CHART_PALETTE,
+              borderWidth: 0,
+            },
+          ],
+        }
+      : null;
+
+  if (isLoading) {
+    return (
+      <PageWrap>
+        <CenteredSpinner $minHeight="60vh" />
+      </PageWrap>
+    );
+  }
 
   return (
-    <Page>
-      <Header>
-        <Greeting>
-          <GreetName>
-            {greeting}, {firstName} 👋
-          </GreetName>
-          <GreetSub>
-            Here's what's happening with your portfolio today.
-          </GreetSub>
-        </Greeting>
-        <LiveBadge>
-          <Dot /> Markets Live
-        </LiveBadge>
-      </Header>
+    <PageWrap>
+      <PageHeader>
+        <div>
+          <PageTitle>Welcome back, {firstName}</PageTitle>
+          <PageSubtitle>
+            Here's what's happening across your accounts right now.
+          </PageSubtitle>
+        </div>
+        {hasAccount && (
+          <Button as={Link} to="/dashboard/trading">
+            <FiPlus /> New Order
+          </Button>
+        )}
+      </PageHeader>
 
-      <Grid>
-        {STATS.map((s, i) => (
-          <StatCard key={i} $accent={s.$accent}>
-            <StatTop>
-              <StatLabel>{s.label}</StatLabel>
-              <StatIcon $bg={s.$bg} $color={s.$color}>
-                {s.icon}
-              </StatIcon>
-            </StatTop>
-            <StatValue>{s.value}</StatValue>
-            <StatChange $up={s.up}>
-              {s.up ? <FiArrowUp size={11} /> : <FiArrowDown size={11} />}
-              {s.change}
-            </StatChange>
-          </StatCard>
-        ))}
+      {error && <Alert $tone="danger">{error}</Alert>}
 
-        <Card $span={8}>
-          <CardHead>
-            <CardTitle>BTC / USD Price Chart</CardTitle>
-            <CardBadge
-              $color="#10b981"
-              $bg="rgba(16,185,129,.1)"
-              $border="rgba(16,185,129,.2)"
-            >
-              Live
-            </CardBadge>
-          </CardHead>
-          <PriceChart />
-        </Card>
+      {!hasAccount ? (
+        <CreateAccountPrompt onCreated={loadData} />
+      ) : (
+        <>
+          <Grid $cols={4} style={{ marginBottom: 20 }}>
+            <StatCard>
+              <StatLabel>
+                <FiBriefcase /> Total Equity
+              </StatLabel>
+              <StatValue>
+                {formatCurrency(overview?.total_equity || 0)}
+              </StatValue>
+            </StatCard>
 
-        <Card $span={4}>
-          <CardHead>
-            <CardTitle>Allocation</CardTitle>
-            <CardBadge>Portfolio</CardBadge>
-          </CardHead>
-          <PortfolioSummary />
-        </Card>
+            <StatCard>
+              <StatLabel>
+                <FiActivity /> Unrealized P&amp;L
+              </StatLabel>
+              <StatValue>{formatCurrency(pnl)}</StatValue>
+              <StatDelta $negative={pnl < 0}>
+                {pnl >= 0 ? <FiArrowUpRight /> : <FiArrowDownRight />}
+                {pnl >= 0 ? "Positive" : "Negative"} exposure
+              </StatDelta>
+            </StatCard>
 
-        <Card $span={6}>
-          <CardHead>
-            <CardTitle>Recent Transactions</CardTitle>
-            <CardBadge>Latest</CardBadge>
-          </CardHead>
-          <RecentTransactions />
-        </Card>
+            <StatCard>
+              <StatLabel>
+                <FiShield /> Margin Utilization
+              </StatLabel>
+              <StatValue>
+                {formatPercent(overview?.margin_utilisation_pct || 0)}
+              </StatValue>
+            </StatCard>
 
-        <Card $span={6}>
-          <CardHead>
-            <CardTitle>Market Overview</CardTitle>
-            <CardBadge
-              $color="#3b82f6"
-              $bg="rgba(59,130,246,.1)"
-              $border="rgba(59,130,246,.2)"
-            >
-              Watchlist
-            </CardBadge>
-          </CardHead>
-          <MarketOverview />
-        </Card>
-      </Grid>
-    </Page>
+            <StatCard>
+              <StatLabel>
+                <FiTrendingUp /> Open Positions
+              </StatLabel>
+              <StatValue>{overview?.open_positions ?? 0}</StatValue>
+            </StatCard>
+          </Grid>
+
+          <Grid $cols={3} style={{ marginBottom: 20, alignItems: "stretch" }}>
+            <Card style={{ gridColumn: "span 2" }}>
+              <CardHeader>
+                <CardTitle>
+                  <FiPieChart /> Allocation by Symbol
+                </CardTitle>
+                <Link
+                  to="/dashboard/portfolio"
+                  style={{ fontSize: 12.5, color: "var(--primary)" }}
+                >
+                  View portfolio →
+                </Link>
+              </CardHeader>
+              {doughnutData ? (
+                <ThemedDoughnut data={doughnutData} height={220} />
+              ) : (
+                <EmptyState>
+                  <FiPieChart />
+                  <h4>No open positions yet</h4>
+                  <p>
+                    Place your first trade to see your allocation breakdown
+                    here.
+                  </p>
+                </EmptyState>
+              )}
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <FiBarChart2 /> Net Greeks
+                </CardTitle>
+              </CardHeader>
+              {greeks && Number(greeks.open_positions) > 0 ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 14,
+                  }}
+                >
+                  {Object.entries(greeks.net_greeks).map(([k, v]) => (
+                    <div key={k}>
+                      <StatLabel style={{ marginBottom: 4 }}>{k}</StatLabel>
+                      <StatValue style={{ fontSize: 16 }}>
+                        {Number(v).toFixed(4)}
+                      </StatValue>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState>
+                  <FiBarChart2 />
+                  <h4>No Greeks yet</h4>
+                  <p>Open a position to track live sensitivity here.</p>
+                </EmptyState>
+              )}
+            </Card>
+          </Grid>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <FiClipboard /> Recent Orders
+              </CardTitle>
+              <Link
+                to="/dashboard/trading"
+                style={{ fontSize: 12.5, color: "var(--primary)" }}
+              >
+                View all →
+              </Link>
+            </CardHeader>
+            {orders.length > 0 ? (
+              <TableScroll>
+                <Table>
+                  <thead>
+                    <tr>
+                      <th>Symbol</th>
+                      <th>Side</th>
+                      <th>Type</th>
+                      <th>Qty</th>
+                      <th>Price</th>
+                      <th>Status</th>
+                      <th>Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map((o) => (
+                      <tr key={o.trade_id}>
+                        <td>{o.symbol}</td>
+                        <td style={{ textTransform: "capitalize" }}>
+                          {o.trade_type}
+                        </td>
+                        <td style={{ textTransform: "capitalize" }}>
+                          {o.order_type}
+                        </td>
+                        <td>{o.quantity}</td>
+                        <td>{formatCurrency(o.executed_price || o.price)}</td>
+                        <td>
+                          <Badge $tone={STATUS_TONE[o.status] || "neutral"}>
+                            {o.status}
+                          </Badge>
+                        </td>
+                        <td>{formatDateTime(o.created_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </TableScroll>
+            ) : (
+              <EmptyState>
+                <FiClipboard />
+                <h4>No orders yet</h4>
+                <p>Your executed and pending orders will show up here.</p>
+              </EmptyState>
+            )}
+          </Card>
+        </>
+      )}
+    </PageWrap>
   );
 };
 

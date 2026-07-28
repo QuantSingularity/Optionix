@@ -50,3 +50,9 @@ variable "certificate_arn" {
   type        = string
   default     = ""
 }
+
+variable "alb_logs_bucket_name" {
+  description = "Name of the S3 bucket to write ALB access logs to"
+  type        = string
+  default     = ""
+}

@@ -53,6 +53,14 @@ resource "random_password" "db_password" {
   numeric          = true
 }
 
+# var.db_password is an optional operator-supplied override (its
+# description already promises this); fall back to the auto-generated
+# password when it's left at its default of null. Both modules below
+# reference this local so they always agree on the same password.
+locals {
+  db_password = coalesce(var.db_password, random_password.db_password.result)
+}
+
 resource "random_password" "redis_password" {
   length  = 32
   special = false
@@ -123,7 +131,7 @@ module "security" {
   enable_cloudtrail       = var.enable_cloudtrail
   cloudtrail_s3_bucket_name = "${var.app_name}-${var.environment}-cloudtrail-${random_id.bucket_suffix.hex}"
   db_username             = var.db_username
-  db_password             = random_password.db_password.result
+  db_password             = local.db_password
   tags = {
     Project = "Optionix"
   }
@@ -138,9 +146,12 @@ module "compute" {
   public_subnet_ids      = module.network.public_subnet_ids
   private_subnet_ids     = module.network.private_subnet_ids
   app_name               = var.app_name
+  instance_type          = var.instance_type
+  key_name               = var.key_name
   security_group_ids     = [module.security.compute_security_group_id]
   alb_security_group_ids = [module.security.web_security_group_id]
   certificate_arn        = var.certificate_arn
+  alb_logs_bucket_name   = module.storage.alb_logs_bucket_name
 }
 
 # Database Module
@@ -152,7 +163,8 @@ module "database" {
   subnet_ids            = module.network.database_subnet_ids
   db_name               = var.db_name
   db_username           = var.db_username
-  db_password           = random_password.db_password.result
+  db_password           = local.db_password
+  db_instance_class     = var.db_instance_class
   security_group_ids    = [module.security.db_security_group_id]
   kms_key_id            = aws_kms_key.optionix_key.arn
   allocated_storage     = var.db_allocated_storage

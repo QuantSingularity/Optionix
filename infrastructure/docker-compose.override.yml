@@ -6,10 +6,10 @@ version: "3.9"
 services:
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../code/backend
+      dockerfile: ../../infrastructure/Dockerfile
     volumes:
-      - .:/app:ro
+      - ../code/backend:/app:ro
       - backend-logs:/app/logs
     environment:
       LOG_LEVEL: debug
@@ -17,8 +17,8 @@ services:
 
   frontend:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend
+      context: ../web-frontend
+      dockerfile: ../infrastructure/Dockerfile.frontend
     environment:
       REACT_APP_ENV: development
 

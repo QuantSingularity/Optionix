@@ -1,8 +1,19 @@
-import { useState } from "react";
-import { FiBell, FiMenu, FiSearch, FiUser } from "react-icons/fi";
+import { useEffect, useRef, useState } from "react";
+import {
+  FiBell,
+  FiChevronDown,
+  FiLogOut,
+  FiMenu,
+  FiSearch,
+  FiSettings,
+  FiUser,
+} from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import { useAuth } from "../../utils/AuthContext";
+import riskService from "../../services/riskService";
+import complianceService from "../../services/complianceService";
+import { Badge as StatusBadge } from "./UI";
 
 const Bar = styled.header`
   position: fixed;
@@ -58,7 +69,7 @@ const Brand = styled.div`
   }
 `;
 
-const Search = styled.div`
+const Search = styled.form`
   position: relative;
   @media (max-width: ${(p) => p.theme.breakpoints.tablet}) {
     display: none;
@@ -72,6 +83,7 @@ const SearchInput = styled.input`
   width: 260px;
   color: ${(p) => p.theme.colors.textPrimary};
   font-size: 13.5px;
+  text-transform: uppercase;
   &:focus {
     outline: none;
     border-color: rgba(59, 130, 246, 0.4);
@@ -79,6 +91,7 @@ const SearchInput = styled.input`
   }
   &::placeholder {
     color: #475569;
+    text-transform: none;
   }
 `;
 const SearchIcon = styled.div`
@@ -116,7 +129,7 @@ const IconBtn = styled.button`
     background: rgba(255, 255, 255, 0.05);
   }
 `;
-const Badge = styled.span`
+const NotifDot = styled.span`
   position: absolute;
   top: 4px;
   right: 4px;
@@ -132,6 +145,10 @@ const Badge = styled.span`
   justify-content: center;
 `;
 
+const AvatarWrap = styled.div`
+  position: relative;
+`;
+
 const Avatar = styled.button`
   display: flex;
   align-items: center;
@@ -139,7 +156,7 @@ const Avatar = styled.button`
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  padding: 6px 12px 6px 8px;
+  padding: 6px 10px 6px 8px;
   cursor: pointer;
   transition: all 0.2s;
   &:hover {
@@ -155,7 +172,9 @@ const AvatarCircle = styled.div`
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 14px;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
 `;
 const AvatarName = styled.span`
   font-size: 13.5px;
@@ -166,40 +185,192 @@ const AvatarName = styled.span`
   }
 `;
 
+const Dropdown = styled.div`
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 240px;
+  background: ${(p) => p.theme.colors.backgroundLight};
+  border: 1px solid ${(p) => p.theme.colors.border};
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+`;
+const DropName = styled.div`
+  font-weight: 700;
+  font-size: 14px;
+  color: ${(p) => p.theme.colors.textPrimary};
+`;
+const DropEmail = styled.div`
+  font-size: 12.5px;
+  color: ${(p) => p.theme.colors.textSecondary};
+  margin-top: 2px;
+  word-break: break-all;
+`;
+const DropDivider = styled.div`
+  height: 1px;
+  background: ${(p) => p.theme.colors.border};
+  margin: 12px 0;
+`;
+const DropItem = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 8px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: ${(p) => (p.$danger ? "#f87171" : p.theme.colors.textPrimary)};
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+  &:hover {
+    background: ${(p) =>
+      p.$danger ? "rgba(239,68,68,.1)" : "rgba(255,255,255,.06)"};
+  }
+`;
+
+const KYC_TONE = {
+  verified: "success",
+  under_review: "warning",
+  pending: "neutral",
+  rejected: "danger",
+};
+
 const Navbar = ({ toggleSidebar }) => {
-  const [notifs] = useState(3);
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [alertCount, setAlertCount] = useState(0);
+  const [query, setQuery] = useState("");
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadAlerts = async () => {
+      try {
+        const [breakers, alerts] = await Promise.all([
+          riskService.getCircuitBreakers(),
+          complianceService.getAmlAlerts({ limit: 50 }),
+        ]);
+        if (!mounted) return;
+        const tripped = (breakers?.circuit_breakers || []).filter(
+          (b) => b.triggered,
+        ).length;
+        const openAlerts = (alerts?.alerts || []).filter(
+          (a) => a.status && a.status !== "resolved" && a.status !== "closed",
+        ).length;
+        setAlertCount(tripped + openAlerts);
+      } catch {
+        // Non-critical — the bell simply shows no badge if these can't load.
+      }
+    };
+    loadAlerts();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const onClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
+  };
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (!query.trim()) return;
+    navigate(
+      `/dashboard/analytics?symbol=${encodeURIComponent(query.trim().toUpperCase())}`,
+    );
+    setQuery("");
+  };
+
+  const initials = (user?.full_name || "Trader")
+    .split(" ")
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
   return (
     <Bar>
       <Left>
-        <MenuBtn onClick={toggleSidebar}>
+        <MenuBtn onClick={toggleSidebar} aria-label="Toggle sidebar">
           <FiMenu />
         </MenuBtn>
         <Brand>
           Option<span>ix</span>
         </Brand>
-        <Search>
+        <Search onSubmit={handleSearch}>
           <SearchIcon>
             <FiSearch />
           </SearchIcon>
-          <SearchInput placeholder="Search markets, assets…" />
+          <SearchInput
+            placeholder="Look up a symbol…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
         </Search>
       </Left>
 
       <Right>
-        <IconBtn>
+        <IconBtn
+          onClick={() => navigate("/dashboard/risk")}
+          aria-label="Alerts"
+        >
           <FiBell />
-          {notifs > 0 && <Badge>{notifs}</Badge>}
+          {alertCount > 0 && (
+            <NotifDot>{alertCount > 9 ? "9+" : alertCount}</NotifDot>
+          )}
         </IconBtn>
 
-        <Avatar onClick={() => navigate("/dashboard")}>
-          <AvatarCircle>
-            <FiUser />
-          </AvatarCircle>
-          <AvatarName>{user?.full_name?.split(" ")[0] || "Trader"}</AvatarName>
-        </Avatar>
+        <AvatarWrap ref={menuRef}>
+          <Avatar onClick={() => setMenuOpen((o) => !o)}>
+            <AvatarCircle>{initials || <FiUser />}</AvatarCircle>
+            <AvatarName>
+              {user?.full_name?.split(" ")[0] || "Trader"}
+            </AvatarName>
+            <FiChevronDown size={14} />
+          </Avatar>
+          {menuOpen && (
+            <Dropdown>
+              <DropName>{user?.full_name || "Trader"}</DropName>
+              <DropEmail>{user?.email}</DropEmail>
+              {user?.kyc_status && (
+                <div style={{ marginTop: 8 }}>
+                  <StatusBadge $tone={KYC_TONE[user.kyc_status] || "neutral"}>
+                    KYC · {user.kyc_status.replace("_", " ")}
+                  </StatusBadge>
+                </div>
+              )}
+              <DropDivider />
+              <DropItem
+                onClick={() => {
+                  setMenuOpen(false);
+                  navigate("/dashboard/settings");
+                }}
+              >
+                <FiSettings /> Settings
+              </DropItem>
+              <DropItem $danger onClick={handleLogout}>
+                <FiLogOut /> Sign out
+              </DropItem>
+            </Dropdown>
+          )}
+        </AvatarWrap>
       </Right>
     </Bar>
   );

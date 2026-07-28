@@ -16,6 +16,15 @@
     login_unix_socket: /var/run/mysqld/mysqld.sock
   become: yes
 
+- name: Create root MySQL credentials file for automated/backup access
+  template:
+    src: root_my_cnf.j2
+    dest: /root/.my.cnf
+    owner: root
+    group: root
+    mode: "0600"
+  become: yes
+
 - name: Remove anonymous MySQL users
   mysql_user:
     name: ""

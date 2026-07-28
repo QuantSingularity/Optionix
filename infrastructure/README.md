@@ -47,17 +47,19 @@ infrastructure/
 │       ├── dev/
 │       ├── staging/
 │       └── prod/
-├── kubernetes/                        # K8s manifests
-│   ├── base/                          # Base manifests
-│   │   ├── app-secrets.yaml           # Helm template version
-│   │   ├── app-secrets.yaml.example   # Raw K8s example (COPY & EDIT)
+├── kubernetes/                        # Helm chart for the K8s manifests
+│   ├── Chart.yaml                     # Chart metadata
+│   ├── values.yaml                    # Chart default values
+│   ├── app-secrets.yaml.example       # Raw K8s Secret example (COPY & EDIT, no Helm needed)
+│   ├── templates/                     # Rendered by `helm template`/`helm install`
+│   │   ├── app-secrets.yaml           # Helm-templated Secret
 │   │   ├── backend-deployment.yaml
 │   │   ├── database-statefulset.yaml
 │   │   ├── ingress.yaml
 │   │   ├── monitoring-stack.yaml
 │   │   ├── network-policies.yaml
 │   │   └── pod-security-policy.yaml
-│   └── environments/                  # Environment-specific values
+│   └── environments/                  # Environment-specific value overrides
 │       ├── dev/values.yaml
 │       ├── staging/values.yaml
 │       └── prod/values.yaml
@@ -150,30 +152,36 @@ terraform apply plan.out
 
 ### 2. Kubernetes Setup
 
+The manifests under `kubernetes/` use Helm templating syntax
+(`{{ .Values.x }}`) throughout, so they must be rendered through Helm one
+way or another - plain `kubectl apply` on these files directly will not
+work, since kubectl has no template engine.
+
 ```bash
 cd kubernetes
 
-# For raw Kubernetes (no Helm):
-cp base/app-secrets.yaml.example base/app-secrets.yaml
-# Edit secrets with base64-encoded values
-vim base/app-secrets.yaml
+# Lint and render-check the chart against an environment's values
+helm lint . --values environments/prod/values.yaml
+helm template optionix . --values environments/prod/values.yaml > /tmp/rendered.yaml
 
-# Validate manifests
-for file in base/*.yaml; do
-  if [ "$file" != "base/app-secrets.yaml" ]; then
-    kubectl apply --dry-run=client -f "$file"
-  fi
-done
-
-# Apply to cluster
-kubectl apply -f base/
-
-# For Helm deployment:
-helm install optionix ./base \
+# Install/upgrade via Helm (recommended)
+helm upgrade --install optionix . \
   --namespace optionix \
   --create-namespace \
   --values environments/prod/values.yaml
+
+# Alternative: render once with Helm, then apply the plain output with
+# kubectl directly (useful in CI pipelines that don't run Helm at deploy
+# time, or when you want to diff plain YAML before applying it)
+helm template optionix . --values environments/prod/values.yaml | \
+  kubectl apply -f -
 ```
+
+For a raw-Kubernetes reference (no Helm involved at all), see
+`app-secrets.yaml.example` at the chart root - it shows the equivalent
+plain `Secret` manifest with placeholder values, for environments that
+manage secrets entirely outside of Helm (e.g. via a separate `kubectl
+apply` or external secret sync).
 
 ### 3. Ansible Setup
 
@@ -236,15 +244,21 @@ tflint --recursive
 ```bash
 cd kubernetes
 
-# YAML lint
-yamllint -d "{extends: default, rules: {line-length: {max: 120}}}" base/*.yaml
+# Lint the chart itself (checks template syntax and values usage)
+helm lint . --values environments/prod/values.yaml
 
-# Dry-run validation
-kubectl apply --dry-run=client -f base/backend-deployment.yaml
-kubectl apply --dry-run=client -f base/database-statefulset.yaml
+# Render to plain YAML, then validate the rendered output - yamllint,
+# kubectl, and kubeval all operate on plain YAML and have no template
+# engine, so they must run against rendered output, not templates/*.yaml
+# directly (which still contains unrendered {{ .Values.x }} syntax).
+helm template optionix . --values environments/prod/values.yaml > /tmp/rendered.yaml
+
+yamllint -d "{extends: default, rules: {line-length: {max: 120}}}" /tmp/rendered.yaml
+
+kubectl apply --dry-run=client -f /tmp/rendered.yaml
 
 # Kubeval (if installed)
-kubeval base/*.yaml
+kubeval /tmp/rendered.yaml
 ```
 
 ### Ansible Validation
@@ -315,7 +329,7 @@ shellcheck *.sh
 
 - `terraform.tfvars`
 - `backend.hcl`
-- `kubernetes/base/app-secrets.yaml`
+- `kubernetes/templates/app-secrets.yaml` (only if manually populated outside Helm; normally values come from `--set`/`-f` and are never written to disk)
 - `ansible/inventory/hosts.yml`
 - `ansible/group_vars/vault.yml`
 - `ansible/group_vars/all.yml`
@@ -406,9 +420,10 @@ Error: secrets "optionix-secrets" not found
 **Solution**: Create secrets before deploying:
 
 ```bash
-cp kubernetes/base/app-secrets.yaml.example kubernetes/base/app-secrets.yaml
-# Edit and apply
-kubectl apply -f kubernetes/base/app-secrets.yaml
+cp kubernetes/app-secrets.yaml.example kubernetes/app-secrets.yaml
+# Edit and apply directly (this bypasses Helm entirely, for cases where
+# secrets are managed outside the chart)
+kubectl apply -f kubernetes/app-secrets.yaml
 ```
 
 ### Ansible Connection Refused

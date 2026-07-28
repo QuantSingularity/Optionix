@@ -4,7 +4,7 @@
   package:
     name:
       - nginx
-      - nginx-module-njs
+      - libnginx-mod-http-headers-more-filter
       - certbot
       - python3-certbot-nginx
     state: present
@@ -84,6 +84,7 @@
   package:
     name:
       - libmodsecurity3
+      - libnginx-mod-http-modsecurity
       - modsecurity-crs
     state: present
   become: yes
