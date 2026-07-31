@@ -3,18 +3,18 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./styles/index.css";
 
-// Global error handler — shows any uncaught JS error directly in the page
+// Global error handler: shows any uncaught JS error directly in the page
 // so a blank screen never hides the real problem.
 window.addEventListener("error", (e) => {
   const el = document.getElementById("root");
   if (el && !el.firstChild) {
     el.innerHTML = `
-      <div style="font-family:monospace;color:#ef5350;background:#131722;
+      <div style="font-family:monospace;color:#c2483f;background:#08090b;
                   min-height:100vh;padding:32px;box-sizing:border-box">
         <h2 style="margin-top:0">Runtime Error</h2>
         <b>${e.message}</b><br/><br/>
         <small>${e.filename}:${e.lineno}:${e.colno}</small>
-        <pre style="margin-top:16px;white-space:pre-wrap;color:#b2b5be">
+        <pre style="margin-top:16px;white-space:pre-wrap;color:#8f8f86">
 ${e.error?.stack || "No stack trace"}
         </pre>
       </div>`;

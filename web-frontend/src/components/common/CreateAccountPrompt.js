@@ -55,7 +55,7 @@ const CreateAccountPrompt = ({ onCreated }) => {
             width: 40,
             height: 40,
             borderRadius: 10,
-            background: "rgba(59,130,246,.12)",
+            background: "rgba(198, 161, 91,.12)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -69,7 +69,7 @@ const CreateAccountPrompt = ({ onCreated }) => {
         <div>
           <h3
             style={{
-              fontFamily: "Syne, sans-serif",
+              fontFamily: "DM Sans, sans-serif",
               fontSize: 17,
               fontWeight: 700,
             }}

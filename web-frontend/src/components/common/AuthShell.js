@@ -8,7 +8,7 @@ export const Shell = styled.div`
   min-height: 100vh;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  background: #0b0e17;
+  background: #08090b;
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
@@ -24,17 +24,24 @@ export const Brand = styled.div`
   justify-content: space-between;
   background:
     radial-gradient(
-      ellipse 80% 60% at 30% 0%,
-      rgba(59, 130, 246, 0.16),
+      ellipse 70% 55% at 25% 0%,
+      rgba(198, 161, 91, 0.1),
       transparent 60%
     ),
+    #08090b;
+  background-image:
+    linear-gradient(rgba(198, 161, 91, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(198, 161, 91, 0.045) 1px, transparent 1px),
     radial-gradient(
-      ellipse 60% 50% at 90% 100%,
-      rgba(212, 175, 106, 0.12),
+      ellipse 70% 55% at 25% 0%,
+      rgba(198, 161, 91, 0.1),
       transparent 60%
-    ),
-    #0b0e17;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+    );
+  background-size:
+    56px 56px,
+    56px 56px,
+    auto;
+  border-right: 1px solid rgba(243, 241, 234, 0.07);
 
   @media (max-width: 900px) {
     display: none;
@@ -42,30 +49,31 @@ export const Brand = styled.div`
 `;
 
 export const BrandLogo = styled(Link)`
-  font-family: "Syne", sans-serif;
-  font-size: 22px;
+  font-family: "DM Sans", sans-serif;
+  font-size: 21px;
   font-weight: 800;
-  color: #3b82f6;
-  letter-spacing: -0.4px;
+  color: #f3f1ea;
+  letter-spacing: -0.02em;
   span {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-weight: 600;
     color: var(--gold);
   }
 `;
 
 export const BrandQuote = styled.div`
-  font-family: "Playfair Display", serif;
+  font-family: "Cormorant Garamond", serif;
   font-style: italic;
-  font-size: clamp(1.7rem, 2.6vw, 2.4rem);
-  line-height: 1.35;
-  color: #f1f5f9;
+  font-weight: 500;
+  font-size: clamp(1.8rem, 2.7vw, 2.5rem);
+  line-height: 1.32;
+  color: #f3f1ea;
   max-width: 460px;
   animation: ${fadeUp} 0.7s ease both;
 
   span {
-    background: linear-gradient(135deg, #3b82f6, var(--gold));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: var(--gold);
   }
 `;
 
@@ -80,12 +88,13 @@ export const BrandFeature = styled.div`
   display: flex;
   align-items: center;
   gap: 12px;
-  color: #cbd5e1;
+  color: #c7c5ba;
   font-size: 14px;
+  font-family: "DM Sans", sans-serif;
 
   svg {
     color: var(--gold);
-    font-size: 18px;
+    font-size: 17px;
     flex-shrink: 0;
   }
 `;
@@ -107,12 +116,15 @@ export const FormCard = styled.div`
 
 export const MobileLogo = styled(Link)`
   display: none;
-  font-family: "Syne", sans-serif;
-  font-size: 20px;
+  font-family: "DM Sans", sans-serif;
+  font-size: 19px;
   font-weight: 800;
-  color: #3b82f6;
+  color: #f3f1ea;
   margin-bottom: 32px;
   span {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-weight: 600;
     color: var(--gold);
   }
   @media (max-width: 900px) {
@@ -125,25 +137,25 @@ export const BackHome = styled(Link)`
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: #64748b;
+  color: #6f6f66;
   margin-bottom: 28px;
   transition: color 0.15s;
   &:hover {
-    color: #94a3b8;
+    color: #93938a;
   }
 `;
 
 export const FormTitle = styled.h1`
-  font-family: "Syne", sans-serif;
-  font-size: 26px;
-  font-weight: 800;
-  color: #f1f5f9;
+  font-family: "Cormorant Garamond", serif;
+  font-weight: 600;
+  font-size: 30px;
+  color: #f3f1ea;
   margin-bottom: 8px;
 `;
 
 export const FormSubtitle = styled.p`
   font-size: 14px;
-  color: #94a3b8;
+  color: #93938a;
   margin-bottom: 32px;
   line-height: 1.6;
 `;
@@ -152,10 +164,10 @@ export const SwitchLine = styled.p`
   text-align: center;
   margin-top: 24px;
   font-size: 13.5px;
-  color: #94a3b8;
+  color: #93938a;
 
   a {
-    color: #3b82f6;
+    color: var(--gold);
     font-weight: 600;
     &:hover {
       text-decoration: underline;
@@ -168,14 +180,14 @@ export const Divider = styled.div`
   align-items: center;
   gap: 12px;
   margin: 24px 0;
-  color: #475569;
+  color: #57574d;
   font-size: 12px;
   &::before,
   &::after {
     content: "";
     flex: 1;
     height: 1px;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(243, 241, 234, 0.08);
   }
 `;
 

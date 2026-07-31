@@ -2,7 +2,7 @@ import React from "react";
 
 // ErrorBoundary intentionally uses ONLY inline styles for its error UI.
 // If styled-components itself is what crashed, we cannot use it to display
-// the error — we'd get a second crash and a permanently blank page.
+// the error; we'd get a second crash and a permanently blank page.
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -35,8 +35,8 @@ class ErrorBoundary extends React.Component {
             alignItems: "center",
             justifyContent: "center",
             minHeight: "100vh",
-            backgroundColor: "#131722",
-            color: "#ffffff",
+            backgroundColor: "#08090b",
+            color: "#f3f1ea",
             padding: "40px",
             fontFamily:
               "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
@@ -51,7 +51,7 @@ class ErrorBoundary extends React.Component {
 
           <h2
             style={{
-              color: "#ffffff",
+              color: "#f3f1ea",
               fontSize: "22px",
               fontWeight: 700,
               margin: "0 0 10px",
@@ -62,7 +62,7 @@ class ErrorBoundary extends React.Component {
 
           <p
             style={{
-              color: "#b2b5be",
+              color: "#8f8f86",
               fontSize: "15px",
               margin: "0 0 28px",
               textAlign: "center",
@@ -83,7 +83,7 @@ class ErrorBoundary extends React.Component {
             >
               <summary
                 style={{
-                  color: "#b2b5be",
+                  color: "#8f8f86",
                   fontSize: "13px",
                   fontWeight: 600,
                   marginBottom: "8px",
@@ -94,23 +94,23 @@ class ErrorBoundary extends React.Component {
               </summary>
               <pre
                 style={{
-                  backgroundColor: "#1e222d",
-                  border: "1px solid #2a2e39",
+                  backgroundColor: "#16171a",
+                  border: "1px solid #26262a",
                   borderRadius: "6px",
                   padding: "14px",
                   overflowX: "auto",
                   whiteSpace: "pre-wrap",
                   wordBreak: "break-word",
                   fontSize: "12px",
-                  color: "#ef5350",
+                  color: "#c2483f",
                   margin: 0,
                 }}
               >
                 <strong>Error:</strong> {this.state.error.toString()}
                 {"\n\n"}
-                <strong style={{ color: "#b2b5be" }}>Component Stack:</strong>
+                <strong style={{ color: "#8f8f86" }}>Component Stack:</strong>
                 {"\n"}
-                <span style={{ color: "#b2b5be" }}>
+                <span style={{ color: "#8f8f86" }}>
                   {this.state.errorInfo?.componentStack}
                 </span>
               </pre>
@@ -120,8 +120,8 @@ class ErrorBoundary extends React.Component {
           <button
             onClick={this.handleReload}
             style={{
-              backgroundColor: "#2962ff",
-              color: "white",
+              backgroundColor: "#c6a15b",
+              color: "#0c0d0f",
               padding: "12px 28px",
               border: "none",
               borderRadius: "6px",

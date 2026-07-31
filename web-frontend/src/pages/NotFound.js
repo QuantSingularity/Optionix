@@ -15,21 +15,20 @@ const Wrap = styled.div`
 `;
 
 const Code = styled.div`
-  font-family: "Syne", sans-serif;
-  font-size: clamp(4rem, 12vw, 7rem);
-  font-weight: 800;
-  background: linear-gradient(135deg, #3b82f6, var(--gold));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-family: "Cormorant Garamond", serif;
+  font-style: italic;
+  font-weight: 600;
+  font-size: clamp(4.5rem, 13vw, 8rem);
+  color: var(--gold);
   line-height: 1;
 `;
 
 const Title = styled.h1`
-  font-family: "Syne", sans-serif;
-  font-size: 1.6rem;
+  font-family: "DM Sans", sans-serif;
+  font-weight: 700;
+  font-size: 1.5rem;
   color: var(--text-primary);
-  margin-top: 12px;
+  margin-top: 14px;
 `;
 
 const Subtitle = styled.p`

@@ -86,11 +86,11 @@ const SearchInput = styled.input`
   text-transform: uppercase;
   &:focus {
     outline: none;
-    border-color: rgba(59, 130, 246, 0.4);
-    background: rgba(59, 130, 246, 0.05);
+    border-color: rgba(198, 161, 91, 0.4);
+    background: rgba(198, 161, 91, 0.05);
   }
   &::placeholder {
-    color: #475569;
+    color: #57574d;
     text-transform: none;
   }
 `;
@@ -99,7 +99,7 @@ const SearchIcon = styled.div`
   left: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: #475569;
+  color: #57574d;
   font-size: 15px;
   display: flex;
   pointer-events: none;
@@ -136,7 +136,7 @@ const NotifDot = styled.span`
   width: 15px;
   height: 15px;
   border-radius: 50%;
-  background: #ef4444;
+  background: #c2483f;
   color: #fff;
   font-size: 9px;
   font-weight: 700;
@@ -167,11 +167,11 @@ const AvatarCircle = styled.div`
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  background: linear-gradient(135deg, #d6b578, #c6a15b);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: #14110a;
   font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
@@ -221,7 +221,7 @@ const DropItem = styled.button`
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: ${(p) => (p.$danger ? "#f87171" : p.theme.colors.textPrimary)};
+  color: ${(p) => (p.$danger ? "#cf6b61" : p.theme.colors.textPrimary)};
   font-size: 13.5px;
   font-weight: 500;
   cursor: pointer;
@@ -229,7 +229,7 @@ const DropItem = styled.button`
   transition: background 0.15s;
   &:hover {
     background: ${(p) =>
-      p.$danger ? "rgba(239,68,68,.1)" : "rgba(255,255,255,.06)"};
+      p.$danger ? "rgba(194, 72, 63,.1)" : "rgba(255,255,255,.06)"};
   }
 `;
 
@@ -265,7 +265,7 @@ const Navbar = ({ toggleSidebar }) => {
         ).length;
         setAlertCount(tripped + openAlerts);
       } catch {
-        // Non-critical — the bell simply shows no badge if these can't load.
+        // Non-critical: the bell simply shows no badge if these can't load.
       }
     };
     loadAlerts();

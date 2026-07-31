@@ -1,6 +1,6 @@
 export function formatCurrency(value, { decimals = 2 } = {}) {
   const num = Number(value);
-  if (Number.isNaN(num)) return "—";
+  if (Number.isNaN(num)) return "-";
   return num.toLocaleString(undefined, {
     style: "currency",
     currency: "USD",
@@ -11,7 +11,7 @@ export function formatCurrency(value, { decimals = 2 } = {}) {
 
 export function formatNumber(value, { decimals = 2 } = {}) {
   const num = Number(value);
-  if (Number.isNaN(num)) return "—";
+  if (Number.isNaN(num)) return "-";
   return num.toLocaleString(undefined, {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
@@ -20,7 +20,7 @@ export function formatNumber(value, { decimals = 2 } = {}) {
 
 export function formatPercent(value, { decimals = 2 } = {}) {
   const num = Number(value);
-  if (Number.isNaN(num)) return "—";
+  if (Number.isNaN(num)) return "-";
   return `${num.toLocaleString(undefined, {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
@@ -28,9 +28,9 @@ export function formatPercent(value, { decimals = 2 } = {}) {
 }
 
 export function formatDate(value, opts = {}) {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
@@ -40,9 +40,9 @@ export function formatDate(value, opts = {}) {
 }
 
 export function formatDateTime(value) {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleString(undefined, {
     month: "short",
     day: "numeric",

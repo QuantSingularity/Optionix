@@ -88,19 +88,19 @@ const Settings = () => {
             <div>
               <StatLabel>Full name</StatLabel>
               <StatValue style={{ fontSize: 16 }}>
-                {user?.full_name || "—"}
+                {user?.full_name || "-"}
               </StatValue>
             </div>
             <div>
               <StatLabel>Email</StatLabel>
               <StatValue style={{ fontSize: 16 }}>
-                {user?.email || "—"}
+                {user?.email || "-"}
               </StatValue>
             </div>
             <div>
               <StatLabel>Role</StatLabel>
               <StatValue style={{ fontSize: 16, textTransform: "capitalize" }}>
-                {user?.role || "—"}
+                {user?.role || "-"}
               </StatValue>
             </div>
             <div>
@@ -139,7 +139,7 @@ const Settings = () => {
               <StatLabel>KYC status</StatLabel>
               <div style={{ marginTop: 6 }}>
                 <Badge $tone={KYC_TONE[user?.kyc_status] || "neutral"}>
-                  {user?.kyc_status?.replace("_", " ") || "—"}
+                  {user?.kyc_status?.replace("_", " ") || "-"}
                 </Badge>
               </div>
             </div>
@@ -154,7 +154,7 @@ const Settings = () => {
             <div>
               <StatLabel>Risk score</StatLabel>
               <StatValue style={{ fontSize: 16 }}>
-                {user?.risk_score ?? "—"}/100
+                {user?.risk_score ?? "-"}/100
               </StatValue>
             </div>
             <Button

@@ -165,7 +165,7 @@ const Compliance = () => {
               <StatLabel>Compliance Status</StatLabel>
               <div style={{ marginTop: 8 }}>
                 <Badge $tone={COMPLIANCE_TONE[status?.status] || "neutral"}>
-                  {status?.status?.replace("_", " ") || "—"}
+                  {status?.status?.replace("_", " ") || "-"}
                 </Badge>
               </div>
             </Card>
@@ -173,7 +173,7 @@ const Compliance = () => {
               <StatLabel>Risk Level</StatLabel>
               <div style={{ marginTop: 8 }}>
                 <Badge $tone={RISK_TONE[status?.risk_level] || "neutral"}>
-                  {status?.risk_level || "—"}
+                  {status?.risk_level || "-"}
                 </Badge>
               </div>
             </Card>
@@ -181,14 +181,14 @@ const Compliance = () => {
               <StatLabel>KYC Status</StatLabel>
               <div style={{ marginTop: 8 }}>
                 <Badge $tone={KYC_TONE[kycStatus?.kyc_status] || "neutral"}>
-                  {kycStatus?.kyc_status?.replace("_", " ") || "—"}
+                  {kycStatus?.kyc_status?.replace("_", " ") || "-"}
                 </Badge>
               </div>
             </Card>
             <Card $pad="16px">
               <StatLabel>Risk Score</StatLabel>
               <StatValue style={{ fontSize: 18, marginTop: 4 }}>
-                {kycStatus?.risk_score ?? "—"}/100
+                {kycStatus?.risk_score ?? "-"}/100
               </StatValue>
             </Card>
           </Grid>
@@ -202,7 +202,7 @@ const Compliance = () => {
               </CardHeader>
               <ul style={{ paddingLeft: 20, fontSize: 13.5, lineHeight: 1.9 }}>
                 {status.issues_found.map((issue) => (
-                  <li key={issue} style={{ color: "#fca5a5" }}>
+                  <li key={issue} style={{ color: "#e0a9a3" }}>
                     {issue}
                   </li>
                 ))}
@@ -239,7 +239,7 @@ const Compliance = () => {
                   style={{ marginTop: 16 }}
                 >
                   {sanctionsResult.matches_found
-                    ? "Potential matches found — review required."
+                    ? "Potential matches found. Review required."
                     : "No matches found across all screened lists."}{" "}
                   Checked: {sanctionsResult.lists_checked.join(", ")}.
                 </Alert>
@@ -507,14 +507,14 @@ const KycPanel = ({ kycStatus, onSubmitted }) => {
             <StatLabel>Current status</StatLabel>
             <div style={{ marginTop: 6 }}>
               <Badge $tone={KYC_TONE[kycStatus?.kyc_status] || "neutral"}>
-                {kycStatus?.kyc_status?.replace("_", " ") || "—"}
+                {kycStatus?.kyc_status?.replace("_", " ") || "-"}
               </Badge>
             </div>
           </div>
           <div>
             <StatLabel>KYC level</StatLabel>
             <StatValue style={{ fontSize: 16 }}>
-              {kycStatus?.kyc_level ?? "—"}
+              {kycStatus?.kyc_level ?? "-"}
             </StatValue>
           </div>
           <div>
@@ -661,7 +661,7 @@ const ReportsPanel = ({ reports, auditLogs, onGenerated }) => {
                       {r.regulation_type}
                     </td>
                     <td>
-                      {formatDate(r.period_start)} – {formatDate(r.period_end)}
+                      {formatDate(r.period_start)} to {formatDate(r.period_end)}
                     </td>
                     <td>
                       <Badge $tone="success">{r.status}</Badge>
@@ -714,7 +714,7 @@ const ReportsPanel = ({ reports, auditLogs, onGenerated }) => {
                         {l.status}
                       </Badge>
                     </td>
-                    <td>{l.ip_address || "—"}</td>
+                    <td>{l.ip_address || "-"}</td>
                     <td>{formatDateTime(l.timestamp)}</td>
                   </tr>
                 ))}

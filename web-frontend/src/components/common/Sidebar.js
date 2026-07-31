@@ -70,13 +70,13 @@ const NavItem = styled(Link)`
   font-weight: ${(p) => (p.$active ? "600" : "500")};
   color: ${(p) =>
     p.$active ? p.theme.colors.primary : p.theme.colors.textSecondary};
-  background: ${(p) => (p.$active ? "rgba(59,130,246,.1)" : "transparent")};
+  background: ${(p) => (p.$active ? "rgba(198, 161, 91,.1)" : "transparent")};
   border-left: 2px solid
     ${(p) => (p.$active ? p.theme.colors.primary : "transparent")};
   transition: all 0.18s;
   &:hover {
     color: ${(p) => p.theme.colors.primary};
-    background: rgba(59, 130, 246, 0.06);
+    background: rgba(198, 161, 91, 0.06);
   }
   svg {
     font-size: 17px;
@@ -104,8 +104,8 @@ const LogoutBtn = styled.button`
   cursor: pointer;
   transition: all 0.18s;
   &:hover {
-    color: #ef4444;
-    background: rgba(239, 68, 68, 0.07);
+    color: #c2483f;
+    background: rgba(194, 72, 63, 0.07);
   }
   svg {
     font-size: 17px;

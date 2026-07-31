@@ -73,8 +73,8 @@ const SignIn = () => {
           Option<span>ix</span>
         </BrandLogo>
         <BrandQuote>
-          "The market rewards <span>discipline</span>, not intuition — trade
-          with the data on your side."
+          "The market rewards <span>discipline</span>, not intuition. Trade with
+          the data on your side."
         </BrandQuote>
         <BrandFeatures>
           <BrandFeature>

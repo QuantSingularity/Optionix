@@ -1,19 +1,29 @@
 :root {
-  --bg-dark: #0b0e17;
-  --bg-card: #111827;
-  --bg-elevated: #161d2e;
-  --primary: #3b82f6;
-  --primary-glow: rgba(59, 130, 246, 0.35);
-  --accent: #f97316;
-  --gold: #d4af6a;
-  --gold-glow: rgba(212, 175, 106, 0.35);
-  --success: #10b981;
-  --danger: #ef4444;
-  --warning: #f59e0b;
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --border: rgba(255, 255, 255, 0.07);
-  --border-accent: rgba(59, 130, 246, 0.3);
+  --bg-dark: #08090b;
+  --bg-card: #121316;
+  --bg-elevated: #1a1b1f;
+  --primary: #c6a15b;
+  --primary-glow: rgba(198, 161, 91, 0.35);
+  --accent: #4f8f74;
+  --gold: #c6a15b;
+  --gold-glow: rgba(198, 161, 91, 0.35);
+  --success: #3f9d72;
+  --danger: #c2483f;
+  --warning: #c98d3f;
+  --text-primary: #f3f1ea;
+  --text-secondary: #93938a;
+  --border: rgba(243, 241, 234, 0.08);
+  --border-accent: rgba(198, 161, 91, 0.32);
+}
+
+::selection {
+  background: rgba(198, 161, 91, 0.28);
+  color: #f3f1ea;
+}
+
+:focus-visible {
+  outline: 1.5px solid var(--primary);
+  outline-offset: 2px;
 }
 
 *,
@@ -43,9 +53,10 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: "Syne", sans-serif;
+  font-family: "DM Sans", sans-serif;
   line-height: 1.2;
   font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 a {

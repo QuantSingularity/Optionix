@@ -183,7 +183,7 @@ const Risk = () => {
           <StatLabel>Status</StatLabel>
           <div style={{ marginTop: 8 }}>
             <Badge $tone={LIMIT_TONE[limits?.status] || "neutral"}>
-              {limits?.status || "—"}
+              {limits?.status || "-"}
             </Badge>
           </div>
         </Card>

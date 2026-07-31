@@ -25,7 +25,7 @@ export const PageHeader = styled.div`
 `;
 
 export const PageTitle = styled.h1`
-  font-family: "Syne", sans-serif;
+  font-family: "DM Sans", sans-serif;
   font-size: clamp(1.5rem, 2.4vw, 2rem);
   font-weight: 800;
   color: var(--text-primary);
@@ -83,7 +83,7 @@ export const CardHeader = styled.div`
 `;
 
 export const CardTitle = styled.h3`
-  font-family: "Syne", sans-serif;
+  font-family: "DM Sans", sans-serif;
   font-size: 16px;
   font-weight: 700;
   color: var(--text-primary);
@@ -159,11 +159,11 @@ export const Button = styled.button`
         `
       : p.$variant === "danger"
         ? css`
-            background: rgba(239, 68, 68, 0.12);
-            color: #fca5a5;
-            border-color: rgba(239, 68, 68, 0.3);
+            background: rgba(194, 72, 63, 0.12);
+            color: #e0a9a3;
+            border-color: rgba(194, 72, 63, 0.3);
             &:hover {
-              background: rgba(239, 68, 68, 0.2);
+              background: rgba(194, 72, 63, 0.2);
             }
           `
         : p.$variant === "success"
@@ -171,22 +171,22 @@ export const Button = styled.button`
               background: var(--success);
               color: #fff;
               &:hover {
-                background: #0ea271;
+                background: #368a63;
               }
             `
           : p.$variant === "gold"
             ? css`
-                background: linear-gradient(135deg, #d4af6a, #b8934f);
+                background: linear-gradient(135deg, #c6a15b, #b8934f);
                 color: #14110a;
                 &:hover {
                   filter: brightness(1.08);
                 }
               `
             : css`
-                background: linear-gradient(135deg, #3b82f6, #2563eb);
-                color: #fff;
+                background: linear-gradient(135deg, #d6b578, #c6a15b);
+                color: #14110a;
                 &:hover {
-                  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.35);
+                  box-shadow: 0 4px 20px rgba(198, 161, 91, 0.35);
                   transform: translateY(-1px);
                 }
               `}
@@ -215,29 +215,29 @@ export const Badge = styled.span`
     const tone = p.$tone || "neutral";
     const map = {
       success: css`
-        background: rgba(16, 185, 129, 0.14);
-        color: #34d399;
-        border: 1px solid rgba(16, 185, 129, 0.3);
+        background: rgba(63, 157, 114, 0.14);
+        color: #6bb994;
+        border: 1px solid rgba(63, 157, 114, 0.3);
       `,
       danger: css`
-        background: rgba(239, 68, 68, 0.14);
-        color: #f87171;
-        border: 1px solid rgba(239, 68, 68, 0.3);
+        background: rgba(194, 72, 63, 0.14);
+        color: #cf6b61;
+        border: 1px solid rgba(194, 72, 63, 0.3);
       `,
       warning: css`
-        background: rgba(245, 158, 11, 0.14);
-        color: #fbbf24;
-        border: 1px solid rgba(245, 158, 11, 0.3);
+        background: rgba(201, 141, 63, 0.14);
+        color: #d8a85e;
+        border: 1px solid rgba(201, 141, 63, 0.3);
       `,
       info: css`
-        background: rgba(59, 130, 246, 0.14);
-        color: #60a5fa;
-        border: 1px solid rgba(59, 130, 246, 0.3);
+        background: rgba(198, 161, 91, 0.14);
+        color: #d3b877;
+        border: 1px solid rgba(198, 161, 91, 0.3);
       `,
       gold: css`
-        background: rgba(212, 175, 106, 0.14);
+        background: rgba(198, 161, 91, 0.14);
         color: var(--gold);
-        border: 1px solid rgba(212, 175, 106, 0.35);
+        border: 1px solid rgba(198, 161, 91, 0.35);
       `,
       neutral: css`
         background: rgba(255, 255, 255, 0.07);
@@ -281,7 +281,7 @@ export const inputStyles = css`
     border-color: var(--primary);
   }
   &::placeholder {
-    color: #5b6478;
+    color: #5c5c52;
   }
 `;
 
@@ -305,7 +305,7 @@ export const HelpText = styled.span`
 
 export const ErrorText = styled.span`
   font-size: 13px;
-  color: #f87171;
+  color: #cf6b61;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -361,7 +361,7 @@ export const EmptyState = styled.div`
     margin-bottom: 14px;
   }
   h4 {
-    font-family: "Syne", sans-serif;
+    font-family: "DM Sans", sans-serif;
     color: var(--text-primary);
     font-size: 16px;
     margin-bottom: 6px;
@@ -403,26 +403,26 @@ export const Alert = styled.div`
   ${(p) =>
     p.$tone === "danger"
       ? css`
-          background: rgba(239, 68, 68, 0.1);
-          border: 1px solid rgba(239, 68, 68, 0.28);
-          color: #fca5a5;
+          background: rgba(194, 72, 63, 0.1);
+          border: 1px solid rgba(194, 72, 63, 0.28);
+          color: #e0a9a3;
         `
       : p.$tone === "success"
         ? css`
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px solid rgba(16, 185, 129, 0.28);
-            color: #6ee7b7;
+            background: rgba(63, 157, 114, 0.1);
+            border: 1px solid rgba(63, 157, 114, 0.28);
+            color: #8fcbab;
           `
         : p.$tone === "warning"
           ? css`
-              background: rgba(245, 158, 11, 0.1);
-              border: 1px solid rgba(245, 158, 11, 0.28);
-              color: #fcd34d;
+              background: rgba(201, 141, 63, 0.1);
+              border: 1px solid rgba(201, 141, 63, 0.28);
+              color: #e2c48c;
             `
           : css`
-              background: rgba(59, 130, 246, 0.1);
-              border: 1px solid rgba(59, 130, 246, 0.28);
-              color: #93c5fd;
+              background: rgba(198, 161, 91, 0.1);
+              border: 1px solid rgba(198, 161, 91, 0.28);
+              color: #dcc48c;
             `}
 `;
 

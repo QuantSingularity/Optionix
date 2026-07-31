@@ -28,20 +28,20 @@ const FONT = { family: "'DM Sans', sans-serif", size: 11 };
 const MONO_FONT = { family: "'DM Mono', monospace", size: 11 };
 
 const baseTooltip = {
-  backgroundColor: "#161d2e",
-  borderColor: "rgba(255,255,255,0.1)",
+  backgroundColor: "#1a1b1f",
+  borderColor: "rgba(243,241,234,0.1)",
   borderWidth: 1,
-  titleColor: "#f1f5f9",
-  bodyColor: "#cbd5e1",
+  titleColor: "#f3f1ea",
+  bodyColor: "#dad8cc",
   padding: 10,
-  titleFont: { family: "'Syne', sans-serif", size: 12, weight: "700" },
+  titleFont: { family: "'DM Sans', sans-serif", size: 12, weight: "700" },
   bodyFont: MONO_FONT,
   cornerRadius: 8,
   displayColors: false,
 };
 
 const gridOpts = {
-  color: "rgba(255,255,255,0.05)",
+  color: "rgba(243,241,234,0.05)",
   drawTicks: false,
 };
 
@@ -62,7 +62,7 @@ export function ThemedLine({
         plugins: {
           legend: {
             display: showLegend,
-            labels: { color: "#94a3b8", font: FONT, usePointStyle: true },
+            labels: { color: "#93938a", font: FONT, usePointStyle: true },
           },
           tooltip: {
             ...baseTooltip,
@@ -75,12 +75,12 @@ export function ThemedLine({
         scales: {
           x: {
             grid: { display: false },
-            ticks: { color: "#64748b", font: MONO_FONT },
+            ticks: { color: "#6f6f66", font: MONO_FONT },
           },
           y: {
             grid: gridOpts,
             ticks: {
-              color: "#64748b",
+              color: "#6f6f66",
               font: MONO_FONT,
               callback: (v) => `${yPrefix}${v}`,
             },
@@ -107,11 +107,11 @@ export function ThemedBar({ data, height = 240, horizontal = false }) {
         scales: {
           x: {
             grid: horizontal ? gridOpts : { display: false },
-            ticks: { color: "#64748b", font: MONO_FONT },
+            ticks: { color: "#6f6f66", font: MONO_FONT },
           },
           y: {
             grid: horizontal ? { display: false } : gridOpts,
-            ticks: { color: "#64748b", font: MONO_FONT },
+            ticks: { color: "#6f6f66", font: MONO_FONT },
           },
         },
       }}
@@ -132,7 +132,7 @@ export function ThemedDoughnut({ data, height = 220 }) {
           legend: {
             position: "right",
             labels: {
-              color: "#94a3b8",
+              color: "#93938a",
               font: FONT,
               usePointStyle: true,
               padding: 14,
@@ -147,12 +147,12 @@ export function ThemedDoughnut({ data, height = 220 }) {
 }
 
 export const CHART_PALETTE = [
-  "#3b82f6",
-  "#d4af6a",
-  "#10b981",
-  "#8b5cf6",
-  "#06b6d4",
-  "#f97316",
-  "#ef4444",
-  "#ec4899",
+  "#c6a15b",
+  "#4f8f74",
+  "#3f9d72",
+  "#a8843f",
+  "#8a6a8f",
+  "#c2483f",
+  "#6ea88c",
+  "#93938a",
 ];

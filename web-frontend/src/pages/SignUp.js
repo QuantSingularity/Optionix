@@ -108,7 +108,7 @@ const SignUp = () => {
         </BrandLogo>
         <BrandQuote>
           "Give every trade the same <span>rigor</span> an institutional desk
-          would — that's the whole idea."
+          would. That's the whole idea."
         </BrandQuote>
         <BrandFeatures>
           <BrandFeature>
@@ -258,7 +258,7 @@ const SignUp = () => {
                   type="checkbox"
                   checked={form.agreeTerms}
                   onChange={update("agreeTerms")}
-                  style={{ marginTop: 3, accentColor: "#3b82f6" }}
+                  style={{ marginTop: 3, accentColor: "#c6a15b" }}
                 />
                 I agree to the Terms of Service and consent to Optionix
                 processing my data to provide trading, risk, and compliance

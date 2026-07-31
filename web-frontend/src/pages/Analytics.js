@@ -179,7 +179,7 @@ const OptionPricer = () => {
               ["Gamma (Γ)", result.gamma.toFixed(4)],
               ["Theta (Θ)", result.theta.toFixed(4)],
               ["Vega (ν)", result.vega.toFixed(4)],
-              ["Rho (ρ)", result.rho != null ? result.rho.toFixed(4) : "—"],
+              ["Rho (ρ)", result.rho != null ? result.rho.toFixed(4) : "-"],
             ]}
           />
         ) : (
@@ -369,7 +369,7 @@ const VolatilitySurface = () => {
             );
             return point ? point.implied_vol * 100 : null;
           }),
-          borderColor: ["#3b82f6", "#d4af6a", "#10b981", "#8b5cf6"][i % 4],
+          borderColor: ["#c6a15b", "#3f9d72", "#4f8f74", "#a8843f"][i % 4],
           backgroundColor: "transparent",
           tension: 0.35,
         })),

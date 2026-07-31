@@ -21,7 +21,7 @@ export const LoadingScreen = () => (
   </FullScreen>
 );
 
-/** Only reachable when signed in — otherwise bounces to /login. */
+/** Only reachable when signed in; otherwise bounces to /login. */
 export const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
@@ -33,7 +33,7 @@ export const ProtectedRoute = ({ children }) => {
   return children;
 };
 
-/** Only reachable when signed out — otherwise skips straight to the dashboard. */
+/** Only reachable when signed out; otherwise skips straight to the dashboard. */
 export const PublicOnlyRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
 
