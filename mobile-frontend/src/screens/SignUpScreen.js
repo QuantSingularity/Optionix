@@ -13,11 +13,27 @@ import { AlertBanner } from "../components/UI";
 import { useAuth } from "../context/AuthContext";
 import colors from "../theme";
 
+// Mirrors the backend's validate_password_strength check exactly
+// (app/security.py) so a password that passes here is guaranteed
+// to pass server-side validation too.
+const SEQUENTIAL_PATTERNS = [
+  /(.)\1{3,}/,
+  /(0123|1234|2345|3456|4567|5678|6789|7890)/,
+  /(abcd|bcde|cdef|defg|efgh|fghi|ghij|hijk|ijkl|jklm|klmn|lmno|mnop|nopq|opqr|pqrs|qrst|rstu|stuv|tuvw|uvwx|vwxy|wxyz)/,
+];
+const hasSequentialPattern = (p) =>
+  SEQUENTIAL_PATTERNS.some((re) => re.test(p.toLowerCase()));
+
 const PASSWORD_RULES = [
-  { test: (p) => p.length >= 8, label: "At least 8 characters" },
+  { test: (p) => p.length >= 12, label: "At least 12 characters" },
+  { test: (p) => /[a-z]/.test(p), label: "One lowercase letter" },
   { test: (p) => /[A-Z]/.test(p), label: "One uppercase letter" },
   { test: (p) => /[0-9]/.test(p), label: "One number" },
   { test: (p) => /[^A-Za-z0-9]/.test(p), label: "One special character" },
+  {
+    test: (p) => p.length > 0 && !hasSequentialPattern(p),
+    label: "No repeated or sequential characters",
+  },
 ];
 
 const SignUpScreen = ({ navigation }) => {

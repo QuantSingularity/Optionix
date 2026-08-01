@@ -71,6 +71,15 @@ app = FastAPI(
 # Only enforce in staging/production where real hostnames are known.
 if settings.environment in ("staging", "production"):
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(AdvancedRateLimitMiddleware)
+app.add_middleware(RequestValidationMiddleware)
+app.add_middleware(AuditLoggingMiddleware)
+# CORSMiddleware must be added LAST so it is the outermost layer and still
+# attaches Access-Control-Allow-* headers to responses that other
+# middleware (rate limiting, request validation) short-circuit early —
+# otherwise the browser drops those responses as CORS failures and the
+# frontend sees a generic "Network Error" instead of the real 4xx detail.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -78,10 +87,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(AdvancedRateLimitMiddleware)
-app.add_middleware(RequestValidationMiddleware)
-app.add_middleware(AuditLoggingMiddleware)
 
 # ── Routers ─────────────────────────────────────────────────────────────────
 app.include_router(api_router)
