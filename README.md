@@ -9,7 +9,7 @@
 Optionix is a comprehensive options trading and analytics platform that combines traditional finance with blockchain technology. The platform provides advanced options pricing models, real-time market data, and AI-powered trading signals to help traders make informed decisions.
 
 <div align="center">
-  <img src="docs/images/Optionix.bmp" alt="Options Trading & Analytics Platform" width="80%">
+  <img src="docs/images/homepage.bmp" alt="Optionix HomePage" width="80%">
 </div>
 
 ## Table of Contents
