@@ -17,7 +17,9 @@ import Settings from "./pages/Settings";
 import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp";
 import Trading from "./pages/Trading";
+import Wallet from "./pages/Wallet";
 import { AuthProvider } from "./utils/AuthContext";
+import { WalletProvider } from "./utils/WalletContext";
 
 const theme = {
   colors: {
@@ -53,55 +55,58 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider theme={theme}>
         <AuthProvider>
-          <BrowserRouter>
-            <Routes>
-              {/* Public marketing site */}
-              <Route path="/" element={<Home />} />
+          <WalletProvider>
+            <BrowserRouter>
+              <Routes>
+                {/* Public marketing site */}
+                <Route path="/" element={<Home />} />
 
-              {/* Auth flows */}
-              <Route
-                path="/login"
-                element={
-                  <PublicOnlyRoute>
-                    <SignIn />
-                  </PublicOnlyRoute>
-                }
-              />
-              <Route
-                path="/signup"
-                element={
-                  <PublicOnlyRoute>
-                    <SignUp />
-                  </PublicOnlyRoute>
-                }
-              />
-
-              {/* Authenticated app */}
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute>
-                    <DashboardLayout />
-                  </ProtectedRoute>
-                }
-              >
-                <Route index element={<Dashboard />} />
-                <Route path="trading" element={<Trading />} />
-                <Route path="portfolio" element={<Portfolio />} />
-                <Route path="analytics" element={<Analytics />} />
-                <Route path="risk" element={<Risk />} />
-                <Route path="compliance" element={<Compliance />} />
-                <Route path="settings" element={<Settings />} />
+                {/* Auth flows */}
                 <Route
-                  path="*"
-                  element={<Navigate to="/dashboard" replace />}
+                  path="/login"
+                  element={
+                    <PublicOnlyRoute>
+                      <SignIn />
+                    </PublicOnlyRoute>
+                  }
                 />
-              </Route>
+                <Route
+                  path="/signup"
+                  element={
+                    <PublicOnlyRoute>
+                      <SignUp />
+                    </PublicOnlyRoute>
+                  }
+                />
 
-              {/* 404 */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
+                {/* Authenticated app */}
+                <Route
+                  path="/dashboard"
+                  element={
+                    <ProtectedRoute>
+                      <DashboardLayout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route index element={<Dashboard />} />
+                  <Route path="trading" element={<Trading />} />
+                  <Route path="portfolio" element={<Portfolio />} />
+                  <Route path="wallet" element={<Wallet />} />
+                  <Route path="analytics" element={<Analytics />} />
+                  <Route path="risk" element={<Risk />} />
+                  <Route path="compliance" element={<Compliance />} />
+                  <Route path="settings" element={<Settings />} />
+                  <Route
+                    path="*"
+                    element={<Navigate to="/dashboard" replace />}
+                  />
+                </Route>
+
+                {/* 404 */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </WalletProvider>
         </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>

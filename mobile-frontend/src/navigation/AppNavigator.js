@@ -11,6 +11,8 @@ import RiskScreen from "../screens/RiskScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import TradingScreen from "../screens/TradingScreen";
 
+import WalletScreen from "../screens/WalletScreen";
+
 const Tab = createBottomTabNavigator();
 const MoreStack = createStackNavigator();
 
@@ -30,6 +32,11 @@ const MoreStackNavigator = () => (
       name="MoreMenu"
       component={MoreScreen}
       options={{ title: "More" }}
+    />
+    <MoreStack.Screen
+      name="Wallet"
+      component={WalletScreen}
+      options={{ title: "Wallet" }}
     />
     <MoreStack.Screen
       name="Risk"

@@ -262,6 +262,88 @@ class PositionHealthResponse(BaseModel):
     risk_metrics: Dict[str, Decimal]
 
 
+class BlockchainStatusResponse(BaseModel):
+    web3_installed: bool
+    rpc_connected: bool
+    futures_contract_configured: bool
+    options_contract_configured: bool
+
+
+class WalletBalanceResponse(BaseModel):
+    address: str
+    balance_eth: Decimal
+
+
+class OnChainPositionSummary(BaseModel):
+    position_id: int
+    underlying_asset: str
+    position_type: str
+    size: Decimal
+    entry_price: Decimal
+    margin: Decimal
+    leverage: int
+    liquidation_price: Decimal
+    status: str
+
+
+class OnChainPositionHealthResponse(BaseModel):
+    address: str
+    positions: List[OnChainPositionSummary]
+    total_margin_used: Decimal
+    total_margin_available: Decimal
+    health_ratio: float
+    liquidation_risk: str
+
+
+class OnChainOptionResponse(BaseModel):
+    option_id: int
+    writer: str
+    holder: str
+    option_type: str
+    option_style: str
+    strike_price: Decimal
+    premium: Decimal
+    expiration_time: int
+    collateral: Decimal
+    status: str
+    underlying_asset: str
+    contract_size: Decimal
+    creation_time: int
+
+
+class MarginTxRequest(BaseModel):
+    user_address: str = Field(..., pattern=r"^0x[a-fA-F0-9]{40}$")
+    amount: Decimal = Field(..., gt=0)
+    asset_address: Optional[str] = Field(
+        None,
+        pattern=r"^0x[a-fA-F0-9]{40}$",
+        description="ERC-20 token address, or omit for native ETH",
+    )
+
+
+class OptionTxRequest(BaseModel):
+    wallet_address: str = Field(..., pattern=r"^0x[a-fA-F0-9]{40}$")
+    option_id: int = Field(..., ge=0)
+
+
+class UnsignedTransactionResponse(BaseModel):
+    """
+    An unsigned transaction ready for the caller's own wallet to sign and
+    submit. The backend never sees or handles a private key.
+    """
+
+    transaction: Dict[str, Any]
+
+
+class TransactionStatusResponse(BaseModel):
+    hash: str
+    status: str
+    block_number: Optional[int] = None
+    gas_used: Optional[int] = None
+    confirmations: Optional[int] = None
+    error: Optional[str] = None
+
+
 class MarketDataRequest(BaseModel):
     """Market data request schema for volatility prediction"""
 

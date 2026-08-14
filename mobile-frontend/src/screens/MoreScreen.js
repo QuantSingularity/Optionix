@@ -11,6 +11,12 @@ import { useAuth } from "../context/AuthContext";
 
 const ITEMS = [
   {
+    icon: "wallet-outline",
+    title: "Wallet",
+    desc: "Connect a wallet, manage on-chain margin",
+    screen: "Wallet",
+  },
+  {
     icon: "shield-outline",
     title: "Risk Management",
     desc: "VaR, stress tests, circuit breakers",

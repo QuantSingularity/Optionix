@@ -2,6 +2,7 @@ import {
   FiBarChart2,
   FiBriefcase,
   FiClipboard,
+  FiCreditCard,
   FiGrid,
   FiLogOut,
   FiSettings,
@@ -116,6 +117,7 @@ const NAV = [
   { icon: <FiGrid />, label: "Dashboard", path: "/dashboard" },
   { icon: <FiTrendingUp />, label: "Trading", path: "/dashboard/trading" },
   { icon: <FiBriefcase />, label: "Portfolio", path: "/dashboard/portfolio" },
+  { icon: <FiCreditCard />, label: "Wallet", path: "/dashboard/wallet" },
   { icon: <FiBarChart2 />, label: "Analytics", path: "/dashboard/analytics" },
   { icon: <FiShield />, label: "Risk", path: "/dashboard/risk" },
   {

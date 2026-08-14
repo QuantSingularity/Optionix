@@ -121,6 +121,7 @@ class Settings(BaseSettings):
     gas_price_gwei: int = 20
     gas_limit: int = 21000
     futures_contract_address: str = "0x0000000000000000000000000000000000000000"
+    options_contract_address: str = "0x0000000000000000000000000000000000000000"
 
     equity_symbols: List[str] = ["AAPL", "GOOGL", "MSFT", "AMZN"]
     bond_symbols: List[str] = ["US10Y", "US30Y"]

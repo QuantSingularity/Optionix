@@ -3,15 +3,27 @@ import { StyleSheet, Text, View } from "react-native";
 import { Button, TextInput } from "react-native-paper";
 import { extractErrorMessage } from "../services/api";
 import tradingService from "../services/tradingService";
+import { useWallet } from "../context/WalletContext";
 import colors from "../theme";
 import { generateEthereumAddress } from "../utils/format";
 import { AlertBanner, SectionCard } from "./UI";
 
 const CreateAccountPrompt = ({ onCreated }) => {
+  const {
+    address: connectedAddress,
+    isConnected,
+    isConnecting,
+    connect,
+  } = useWallet();
   const [address, setAddress] = useState(generateEthereumAddress());
   const [initialDeposit, setInitialDeposit] = useState("100000");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const handleUseWallet = async () => {
+    const connected = isConnected ? connectedAddress : await connect();
+    if (connected) setAddress(connected);
+  };
 
   const handleSubmit = async () => {
     setError("");
@@ -58,6 +70,15 @@ const CreateAccountPrompt = ({ onCreated }) => {
         />
         <Button
           mode="outlined"
+          onPress={handleUseWallet}
+          loading={isConnecting}
+          disabled={isConnecting}
+          style={styles.regenBtn}
+        >
+          Use Wallet
+        </Button>
+        <Button
+          mode="outlined"
           onPress={() => setAddress(generateEthereumAddress())}
           style={styles.regenBtn}
         >
@@ -65,8 +86,8 @@ const CreateAccountPrompt = ({ onCreated }) => {
         </Button>
       </View>
       <Text style={styles.helpText}>
-        Auto-generated for demo accounts. Replace it with your own wallet if you
-        have one.
+        Auto-generated for demo accounts. Connect a real wallet or type your own
+        address if you have one.
       </Text>
 
       <Button

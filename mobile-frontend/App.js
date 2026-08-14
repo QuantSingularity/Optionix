@@ -4,6 +4,7 @@ import { Provider as PaperProvider } from "react-native-paper";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
+import { WalletProvider } from "./src/context/WalletContext";
 import AuthNavigator from "./src/navigation/AuthNavigator";
 import MainNavigator from "./src/navigation/AppNavigator";
 import colors, { navTheme, paperTheme } from "./src/theme";
@@ -35,7 +36,9 @@ export default function App() {
           backgroundColor={colors.background}
         />
         <AuthProvider>
-          <AppContent />
+          <WalletProvider>
+            <AppContent />
+          </WalletProvider>
         </AuthProvider>
       </PaperProvider>
     </SafeAreaProvider>

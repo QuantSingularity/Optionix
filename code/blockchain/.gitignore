@@ -1,0 +1,9 @@
+node_modules/
+artifacts/
+cache/
+coverage/
+coverage.json
+.env
+# NOTE: abi/ is intentionally NOT ignored - code/backend/app/services/blockchain_service.py
+# reads these JSON files directly at runtime. Regenerate with `npm run export-abi` after any
+# contract change and commit the result.

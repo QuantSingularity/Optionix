@@ -1,3 +1,6 @@
+// Must be the very first import: WalletConnect's crypto layer needs
+// crypto.getRandomValues, which React Native doesn't provide natively.
+import "react-native-get-random-values";
 import { registerRootComponent } from "expo";
 
 import App from "./App";

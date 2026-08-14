@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { FiArrowRight, FiBriefcase, FiRefreshCw } from "react-icons/fi";
+import { FiArrowRight, FiBriefcase, FiLink, FiRefreshCw } from "react-icons/fi";
 import tradingService from "../../services/tradingService";
 import { extractErrorMessage } from "../../services/apiClient";
 import { generateEthereumAddress } from "../../utils/format";
+import { useWallet } from "../../utils/WalletContext";
 import {
   Alert,
   Button,
@@ -16,11 +17,22 @@ import {
 } from "./UI";
 
 const CreateAccountPrompt = ({ onCreated }) => {
+  const {
+    address: connectedAddress,
+    isConnected,
+    isConnecting,
+    connect,
+  } = useWallet();
   const [address, setAddress] = useState(generateEthereumAddress());
   const [accountType, setAccountType] = useState("demo");
   const [initialDeposit, setInitialDeposit] = useState("100000");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleUseWallet = async () => {
+    const connected = isConnected ? connectedAddress : await connect();
+    if (connected) setAddress(connected);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -134,6 +146,16 @@ const CreateAccountPrompt = ({ onCreated }) => {
               type="button"
               $variant="ghost"
               $sm
+              onClick={handleUseWallet}
+              disabled={isConnecting}
+              title="Use your connected wallet address"
+            >
+              <FiLink /> {isConnecting ? "…" : "Use Wallet"}
+            </Button>
+            <Button
+              type="button"
+              $variant="ghost"
+              $sm
               onClick={() => setAddress(generateEthereumAddress())}
               title="Generate a new address"
             >
@@ -141,8 +163,8 @@ const CreateAccountPrompt = ({ onCreated }) => {
             </Button>
           </div>
           <HelpText>
-            Auto-generated for demo accounts. Replace it with your own wallet if
-            you have one.
+            Auto-generated for demo accounts. Connect a real wallet or type your
+            own address if you have one.
           </HelpText>
         </Field>
 

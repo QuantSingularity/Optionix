@@ -9,6 +9,15 @@ export function formatCurrency(value, decimals = 2) {
   });
 }
 
+export function formatNumber(value, { decimals = 2 } = {}) {
+  const num = Number(value);
+  if (Number.isNaN(num)) return "—";
+  return num.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
 export function formatPercent(value, decimals = 2) {
   const num = Number(value);
   if (Number.isNaN(num)) return "—";
@@ -48,4 +57,9 @@ export function generateEthereumAddress() {
     addr += chars[Math.floor(Math.random() * chars.length)];
   }
   return addr;
+}
+
+export function shortenAddress(address, chars = 4) {
+  if (!address || address.length < 2 + chars * 2) return address || "—";
+  return `${address.slice(0, 2 + chars)}…${address.slice(-chars)}`;
 }

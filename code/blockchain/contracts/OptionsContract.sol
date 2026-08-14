@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 /**
  * @title Enhanced Options Contract for Optionix Platform
@@ -19,9 +20,16 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
  * - Comprehensive audit logging
  * - Oracle integration for price feeds
  * - Margin and collateral management
+ *
+ * NOTE: This is a reference/demo implementation. Solidity >=0.8 has
+ * built-in overflow/underflow checks, so SafeMath is not used. Collateral
+ * and premiums for a given underlying asset are pooled per-asset; this
+ * contract assumes a single fungible collateral unit per `underlyingAsset`
+ * key (e.g. all participants trading a given underlying post collateral in
+ * the same ERC20/ETH). It is not a production-audited settlement engine.
  */
 contract EnhancedOptionsContract is ReentrancyGuard, Pausable, AccessControl {
-    using SafeMath for uint256;
+    using SafeERC20 for IERC20;
 
     // Role definitions
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
@@ -110,7 +118,7 @@ contract EnhancedOptionsContract is ReentrancyGuard, Pausable, AccessControl {
     RiskParameters public riskParams;
 
     // Emergency controls
-    bool public emergencyStop = false;
+    bool public emergencyStopActive = false;
     uint256 public maxDailyVolume;
     uint256 public dailyVolume;
     uint256 public lastVolumeResetTime;
@@ -137,7 +145,15 @@ contract EnhancedOptionsContract is ReentrancyGuard, Pausable, AccessControl {
         uint256 payoff
     );
 
+    event OptionSettled(uint256 indexed optionId, address indexed writer);
+
     event CollateralDeposited(
+        address indexed user,
+        address indexed asset,
+        uint256 amount
+    );
+
+    event CollateralWithdrawn(
         address indexed user,
         address indexed asset,
         uint256 amount
@@ -173,7 +189,7 @@ contract EnhancedOptionsContract is ReentrancyGuard, Pausable, AccessControl {
     }
 
     modifier notEmergencyStop() {
-        require(!emergencyStop, "Emergency stop active");
+        require(!emergencyStopActive, "Emergency stop active");
         _;
     }
 
@@ -182,15 +198,6 @@ contract EnhancedOptionsContract is ReentrancyGuard, Pausable, AccessControl {
         require(
             options[_optionId].status == OptionStatus.ACTIVE,
             "Option not active"
-        );
-        _;
-    }
-
-    modifier withinRiskLimits(address _user, uint256 _exposure) {
-        UserProfile memory profile = userProfiles[_user];
-        require(
-            profile.totalExposure.add(_exposure) <= profile.maxPositionSize,
-            "Exceeds position limit"
         );
         _;
     }
@@ -204,6 +211,7 @@ contract EnhancedOptionsContract is ReentrancyGuard, Pausable, AccessControl {
         _grantRole(ADMIN_ROLE, msg.sender);
         _grantRole(COMPLIANCE_ROLE, msg.sender);
         _grantRole(RISK_MANAGER_ROLE, msg.sender);
+        _grantRole(ORACLE_ROLE, msg.sender);
 
         riskParams = RiskParameters({
             maxLeverage: _maxLeverage,
@@ -274,16 +282,38 @@ contract EnhancedOptionsContract is ReentrancyGuard, Pausable, AccessControl {
             // ETH deposit
             require(msg.value == _amount, "ETH amount mismatch");
         } else {
-            // ERC20 token deposit (would need IERC20 interface)
             require(msg.value == 0, "No ETH for token deposit");
-            // Transfer tokens from user (implementation depends on token contract)
+            IERC20(_asset).safeTransferFrom(msg.sender, address(this), _amount);
         }
 
-        collateralBalances[msg.sender][_asset] = collateralBalances[msg.sender][
-            _asset
-        ].add(_amount);
+        collateralBalances[msg.sender][_asset] += _amount;
 
         emit CollateralDeposited(msg.sender, _asset, _amount);
+    }
+
+    /**
+     * @dev Withdraw unlocked collateral
+     */
+    function withdrawCollateral(
+        address _asset,
+        uint256 _amount
+    ) external onlyCompliantUser nonReentrant {
+        require(_amount > 0, "Amount must be positive");
+        require(
+            collateralBalances[msg.sender][_asset] >= _amount,
+            "Insufficient collateral"
+        );
+
+        collateralBalances[msg.sender][_asset] -= _amount;
+
+        if (_asset == address(0)) {
+            (bool success, ) = payable(msg.sender).call{value: _amount}("");
+            require(success, "ETH transfer failed");
+        } else {
+            IERC20(_asset).safeTransfer(msg.sender, _amount);
+        }
+
+        emit CollateralWithdrawn(msg.sender, _asset, _amount);
     }
 
     /**
@@ -317,8 +347,10 @@ contract EnhancedOptionsContract is ReentrancyGuard, Pausable, AccessControl {
             "Oracle not available"
         );
 
+        uint256 exposure = (_premium * _contractSize) / 1e18;
+
         // Check daily volume limits
-        _checkDailyVolumeLimit(_premium.mul(_contractSize));
+        _checkDailyVolumeLimit(exposure);
 
         // Calculate required collateral
         uint256 requiredCollateral = _calculateRequiredCollateral(
@@ -336,9 +368,8 @@ contract EnhancedOptionsContract is ReentrancyGuard, Pausable, AccessControl {
         );
 
         // Check risk limits
-        uint256 exposure = _premium.mul(_contractSize);
         require(
-            userProfiles[msg.sender].totalExposure.add(exposure) <=
+            userProfiles[msg.sender].totalExposure + exposure <=
                 userProfiles[msg.sender].maxPositionSize,
             "Exceeds position limit"
         );
@@ -369,17 +400,14 @@ contract EnhancedOptionsContract is ReentrancyGuard, Pausable, AccessControl {
         });
 
         // Lock collateral
-        collateralBalances[msg.sender][_underlyingAsset] = collateralBalances[
-            msg.sender
-        ][_underlyingAsset].sub(requiredCollateral);
+        collateralBalances[msg.sender][_underlyingAsset] -= requiredCollateral;
 
         // Update user exposure
-        userProfiles[msg.sender].totalExposure = userProfiles[msg.sender]
-            .totalExposure
-            .add(exposure);
+        userProfiles[msg.sender].totalExposure += exposure;
+        userProfiles[msg.sender].lastActivityTime = block.timestamp;
 
         // Update global metrics
-        totalOpenInterest = totalOpenInterest.add(exposure);
+        totalOpenInterest += exposure;
         userOptions[msg.sender].push(optionId);
 
         emit OptionCreated(
@@ -395,10 +423,130 @@ contract EnhancedOptionsContract is ReentrancyGuard, Pausable, AccessControl {
     }
 
     /**
+     * @dev Purchase an active, unheld option by paying its premium to the writer
+     */
+    function purchaseOption(
+        uint256 _optionId
+    )
+        external
+        payable
+        onlyCompliantUser
+        nonReentrant
+        notEmergencyStop
+        whenNotPaused
+        validOption(_optionId)
+    {
+        Option storage option = options[_optionId];
+        require(option.holder == address(0), "Option already purchased");
+        require(msg.sender != option.writer, "Writer cannot buy own option");
+        require(block.timestamp < option.expirationTime, "Option expired");
+
+        if (option.underlyingAsset == address(0)) {
+            require(msg.value == option.premium, "Incorrect premium sent");
+            (bool success, ) = payable(option.writer).call{
+                value: option.premium
+            }("");
+            require(success, "Premium transfer failed");
+        } else {
+            require(msg.value == 0, "No ETH expected");
+            IERC20(option.underlyingAsset).safeTransferFrom(
+                msg.sender,
+                option.writer,
+                option.premium
+            );
+        }
+
+        option.holder = msg.sender;
+        userOptions[msg.sender].push(_optionId);
+        userProfiles[msg.sender].lastActivityTime = block.timestamp;
+        totalVolume += option.premium;
+
+        emit OptionPurchased(_optionId, msg.sender, option.premium);
+    }
+
+    /**
+     * @dev Exercise an option held by the caller. European options may only
+     * be exercised at/after expiration; American options may be exercised
+     * any time before expiration.
+     */
+    function exerciseOption(
+        uint256 _optionId
+    )
+        external
+        nonReentrant
+        notEmergencyStop
+        whenNotPaused
+        validOption(_optionId)
+    {
+        Option storage option = options[_optionId];
+        require(option.holder == msg.sender, "Only holder can exercise");
+
+        if (option.optionStyle == OptionStyle.EUROPEAN) {
+            require(
+                block.timestamp >= option.expirationTime,
+                "European option not yet expiration"
+            );
+        } else {
+            require(
+                block.timestamp < option.expirationTime,
+                "American option expired"
+            );
+        }
+
+        uint256 currentPrice = _getAssetPrice(option.underlyingAsset);
+        uint256 payoff = _calculatePayoff(option, currentPrice);
+
+        option.status = OptionStatus.EXERCISED;
+
+        uint256 settlement =
+            payoff > option.collateral ? option.collateral : payoff;
+        uint256 remainder = option.collateral - settlement;
+
+        if (settlement > 0) {
+            collateralBalances[msg.sender][option.underlyingAsset] +=
+                settlement;
+        }
+        if (remainder > 0) {
+            collateralBalances[option.writer][option.underlyingAsset] +=
+                remainder;
+        }
+
+        uint256 exposure = (option.premium * option.contractSize) / 1e18;
+        userProfiles[option.writer].totalExposure -= exposure;
+        totalOpenInterest -= exposure;
+
+        emit OptionExercised(_optionId, msg.sender, settlement);
+    }
+
+    /**
+     * @dev Settle an expired option: returns any remaining locked collateral
+     * to the writer if the option was never exercised.
+     */
+    function settleExpiredOption(uint256 _optionId) external nonReentrant {
+        require(_optionId > 0 && _optionId < nextOptionId, "Invalid option ID");
+        Option storage option = options[_optionId];
+        require(option.status == OptionStatus.ACTIVE, "Option not active");
+        require(
+            block.timestamp >= option.expirationTime,
+            "Option not yet expired"
+        );
+
+        option.status = OptionStatus.EXPIRED;
+        collateralBalances[option.writer][option.underlyingAsset] += option
+            .collateral;
+
+        uint256 exposure = (option.premium * option.contractSize) / 1e18;
+        userProfiles[option.writer].totalExposure -= exposure;
+        totalOpenInterest -= exposure;
+
+        emit OptionSettled(_optionId, option.writer);
+    }
+
+    /**
      * @dev Emergency stop function
      */
-    function emergencyStopTrading() external onlyRole(ADMIN_ROLE) {
-        emergencyStop = true;
+    function triggerEmergencyStop() external onlyRole(ADMIN_ROLE) {
+        emergencyStopActive = true;
         _pause();
         emit EmergencyAction("EMERGENCY_STOP", msg.sender, block.timestamp);
     }
@@ -407,7 +555,7 @@ contract EnhancedOptionsContract is ReentrancyGuard, Pausable, AccessControl {
      * @dev Resume trading after emergency stop
      */
     function resumeTrading() external onlyRole(ADMIN_ROLE) {
-        emergencyStop = false;
+        emergencyStopActive = false;
         _unpause();
         emit EmergencyAction("RESUME_TRADING", msg.sender, block.timestamp);
     }
@@ -417,15 +565,17 @@ contract EnhancedOptionsContract is ReentrancyGuard, Pausable, AccessControl {
      */
     function _checkDailyVolumeLimit(uint256 _volume) internal {
         // Reset daily volume if new day
-        if (block.timestamp >= lastVolumeResetTime.add(86400)) {
+        if (block.timestamp >= lastVolumeResetTime + 86400) {
             dailyVolume = 0;
             lastVolumeResetTime = block.timestamp;
         }
 
         require(
-            dailyVolume.add(_volume) <= maxDailyVolume,
+            dailyVolume + _volume <= maxDailyVolume,
             "Daily volume limit exceeded"
         );
+
+        dailyVolume += _volume;
     }
 
     /**
@@ -437,14 +587,39 @@ contract EnhancedOptionsContract is ReentrancyGuard, Pausable, AccessControl {
         uint256 _contractSize,
         address _underlyingAsset
     ) internal view returns (uint256) {
-        uint256 currentPrice = _getAssetPrice(_underlyingAsset);
+        // Referenced for interface completeness / future price-aware margining.
+        _getAssetPrice(_underlyingAsset);
 
         if (_optionType == OptionType.CALL) {
-            // For calls: collateral = contract size * underlying asset
+            // For calls: collateral = contract size of the underlying asset
             return _contractSize;
         } else {
             // For puts: collateral = strike price * contract size
-            return _strikePrice.mul(_contractSize).div(1e18);
+            return (_strikePrice * _contractSize) / 1e18;
+        }
+    }
+
+    /**
+     * @dev Calculate the intrinsic payoff of an option at the current price
+     */
+    function _calculatePayoff(
+        Option memory _option,
+        uint256 _currentPrice
+    ) internal pure returns (uint256) {
+        if (_option.optionType == OptionType.CALL) {
+            if (_currentPrice <= _option.strikePrice) {
+                return 0;
+            }
+            return
+                ((_currentPrice - _option.strikePrice) * _option.contractSize) /
+                1e18;
+        } else {
+            if (_currentPrice >= _option.strikePrice) {
+                return 0;
+            }
+            return
+                ((_option.strikePrice - _currentPrice) * _option.contractSize) /
+                1e18;
         }
     }
 
@@ -459,10 +634,7 @@ contract EnhancedOptionsContract is ReentrancyGuard, Pausable, AccessControl {
             .priceFeed
             .latestRoundData();
         require(price > 0, "Invalid price");
-        require(
-            block.timestamp.sub(updatedAt) <= oracle.heartbeat,
-            "Price stale"
-        );
+        require(block.timestamp - updatedAt <= oracle.heartbeat, "Price stale");
 
         return uint256(price);
     }

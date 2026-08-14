@@ -1,13 +1,24 @@
 """
 Blockchain service module for Optionix platform.
 Handles all blockchain interactions with robust security and error handling.
+
+Integrates with the two contracts in code/blockchain/contracts:
+  - EnhancedFuturesContract (margin deposits/withdrawals, positions)
+  - EnhancedOptionsContract (collateral, option writing/purchase/exercise)
+
+Write operations (deposit, withdraw, purchase, exercise) are exposed as
+*unsigned transaction builders* rather than functions that accept a raw
+private key. The backend never holds or transmits user private keys; it
+prepares calldata and the caller's own wallet (MetaMask, WalletConnect,
+etc.) signs and submits it client-side. `get_transaction_status` can then
+be polled with the resulting transaction hash.
 """
 
 import json
 import logging
-import os
 import time
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
@@ -25,18 +36,45 @@ from ..config import settings
 
 logger = logging.getLogger(__name__)
 
+ZERO_ADDRESS = "0x" + "0" * 40
+
+# This file lives at code/backend/app/services/blockchain_service.py.
+# parents[0]=services parents[1]=app parents[2]=backend parents[3]=code
+_ABI_DIR = Path(__file__).resolve().parents[3] / "blockchain" / "abi"
+
+# Position/Option status enum values, matching the Solidity enum declaration
+# order exactly (see contracts/FuturesContract.sol / OptionsContract.sol).
+_POSITION_STATUS = ["active", "closed", "liquidated", "settled"]
+_OPTION_STATUS = ["active", "exercised", "expired", "cancelled"]
+_OPTION_TYPE = ["call", "put"]
+_OPTION_STYLE = ["european", "american"]
+
 
 class BlockchainService:
-    """Service for interacting with blockchain contracts and wallets"""
+    """Service for interacting with the Optionix on-chain contracts and wallets"""
 
     def __init__(self) -> None:
-        """Initialize blockchain service with Web3 provider"""
-        self.w3: Optional[Web3] = None
+        """Initialize blockchain service with a Web3 provider and both contracts"""
+        self.w3: Optional[Any] = None
         self.futures_contract: Optional[Any] = None
-        self.futures_abi: List[Dict[str, Any]] = []
+        self.options_contract: Optional[Any] = None
+
+        if not _WEB3_AVAILABLE:
+            logger.warning(
+                "web3.py is not installed - blockchain integration is disabled. "
+                "It's listed in requirements.txt; reinstall dependencies to enable it."
+            )
+            return
+
         self._initialize_connection()
-        self._load_contract_abi()
-        self._initialize_contract()
+        futures_abi = self._load_abi("EnhancedFuturesContract.abi.json")
+        options_abi = self._load_abi("EnhancedOptionsContract.abi.json")
+        self.futures_contract = self._initialize_contract(
+            settings.futures_contract_address, futures_abi, "futures"
+        )
+        self.options_contract = self._initialize_contract(
+            settings.options_contract_address, options_abi, "options"
+        )
 
     def _initialize_connection(self) -> None:
         """Initialize Web3 connection with retry logic"""
@@ -74,204 +112,214 @@ class BlockchainService:
                     self.w3 = None
                     return
 
-    def _load_contract_abi(self) -> None:
-        """Load contract ABI from file with error handling"""
+    def _load_abi(self, filename: str) -> List[Dict[str, Any]]:
+        """Load a contract ABI exported from the Hardhat build (blockchain/abi/*.json)"""
+        abi_path = _ABI_DIR / filename
+        if not abi_path.exists():
+            logger.warning(
+                f"Contract ABI file not found at {abi_path}; running without it. "
+                f"Run `npm run export-abi` in code/blockchain after compiling."
+            )
+            return []
         try:
-            # Walk up from backend/app/services/ to project root, then into blockchain/
-            project_root = os.path.dirname(
-                os.path.dirname(
-                    os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-                )
-            )
-            abi_path = os.path.join(
-                project_root,
-                "blockchain",
-                "contracts",
-                "FuturesContract.abi.json",
-            )
-            if not os.path.exists(abi_path):
-                logger.warning(
-                    f"Contract ABI file not found at {abi_path}; running without ABI"
-                )
-                self.futures_abi = []
-                return
             with open(abi_path, "r") as f:
-                self.futures_abi = json.load(f)
-            logger.info("Contract ABI loaded successfully")
+                return json.load(f)
         except Exception as e:
-            logger.error(f"Error loading contract ABI: {e}")
-            self.futures_abi = []
+            logger.error(f"Error loading ABI {filename}: {e}")
+            return []
 
-    def _initialize_contract(self) -> None:
-        """Initialize the futures contract instance"""
-        if not self.w3 or not self.futures_abi:
-            self.futures_contract = None
-            return
-        contract_address = settings.futures_contract_address
-        zero_address = "0x" + "0" * 40
-        if not self.w3.is_address(contract_address) or contract_address.lower() == zero_address:  # type: ignore
-            logger.warning(f"Invalid or zero contract address: {contract_address}")
-            self.futures_contract = None
-            return
+    def _initialize_contract(
+        self, address: str, abi: List[Dict[str, Any]], label: str
+    ) -> Optional[Any]:
+        """Instantiate a contract binding, or None if not configured/available"""
+        if not self.w3 or not abi:
+            return None
+        if not self.w3.is_address(address) or address.lower() == ZERO_ADDRESS:
+            logger.warning(f"Invalid or zero {label} contract address: {address}")
+            return None
         try:
-            self.futures_contract = self.w3.eth.contract(  # type: ignore
-                address=self.w3.to_checksum_address(contract_address),  # type: ignore
-                abi=self.futures_abi,
+            contract = self.w3.eth.contract(
+                address=self.w3.to_checksum_address(address), abi=abi
             )
-            logger.info("Futures contract initialized")
+            logger.info(f"{label.capitalize()} contract initialized at {address}")
+            return contract
         except Exception as e:
-            logger.error(f"Error initializing futures contract: {e}")
-            self.futures_contract = None
+            logger.error(f"Error initializing {label} contract: {e}")
+            return None
 
     def is_connected(self) -> bool:
-        """Check if Web3 connection is active"""
+        """Check if the Web3 connection is active"""
         try:
             return self.w3 is not None and self.w3.is_connected()
         except Exception:
             return False
 
+    def get_integration_status(self) -> Dict[str, Any]:
+        """Report exactly which parts of the on-chain integration are live"""
+        return {
+            "web3_installed": _WEB3_AVAILABLE,
+            "rpc_connected": self.is_connected(),
+            "futures_contract_configured": self.futures_contract is not None,
+            "options_contract_configured": self.options_contract is not None,
+        }
+
     def is_valid_address(self, address: str) -> bool:
-        """
-        Validate Ethereum address with checksum verification
+        """Validate an Ethereum address's format.
 
-        Args:
-            address (str): Ethereum address to validate
-
-        Returns:
-            bool: True if address is valid, False otherwise
+        This is a pure format check and deliberately does not require a
+        live RPC connection - callers rely on it (e.g. to decide whether to
+        fall back to mock data) even when `self.w3` is None.
         """
-        if not self.w3:
+        if not _WEB3_AVAILABLE:
             return False
-        return self.w3.is_address(address)
+        return Web3.is_address(address)
 
     def get_account_balance(self, address: str) -> Decimal:
-        """
-        Get ETH balance for an address
-
-        Args:
-            address (str): Ethereum address
-
-        Returns:
-            Decimal: Balance in ETH
-
-        Raises:
-            ValueError: If address is invalid
-            Exception: If balance retrieval fails
-        """
+        """Get native ETH balance for an address"""
         if not self.is_valid_address(address):
             raise ValueError("Invalid Ethereum address")
         if not self.is_connected():
             raise Exception("Blockchain connection not available")
         try:
-            balance_wei = self.w3.eth.get_balance(address)  # type: ignore
-            balance_eth = self.w3.from_wei(balance_wei, "ether")  # type: ignore
+            balance_wei = self.w3.eth.get_balance(address)
+            balance_eth = self.w3.from_wei(balance_wei, "ether")
             return Decimal(str(balance_eth))
         except Exception as e:
             logger.error(f"Error fetching balance for {address}: {e}")
             raise Exception(f"Failed to fetch balance: {str(e)}")
 
+    # ── Futures: reads ───────────────────────────────────────────────────
+
+    def get_user_position_ids(self, address: str) -> List[int]:
+        """Get all on-chain futures position IDs ever opened by a trader"""
+        if not self.is_valid_address(address):
+            raise ValueError("Invalid Ethereum address")
+        if not self.futures_contract:
+            return []
+        try:
+            checksum = self.w3.to_checksum_address(address)
+            return list(
+                self.futures_contract.functions.getUserPositions(checksum).call()
+            )
+        except (ContractLogicError, Web3Exception) as e:
+            logger.error(f"Contract error fetching positions for {address}: {e}")
+            raise Exception(f"Failed to fetch positions: {str(e)}")
+
     def get_position_health(self, address: str) -> Dict[str, Any]:
         """
-        Get comprehensive health metrics for trading positions
-
-        Args:
-            address (str): Ethereum address of position owner
-
-        Returns:
-            Dict[str, Any]: Position health metrics
-
-        Raises:
-            ValueError: If address is invalid
-            Exception: If contract call fails
+        Aggregate on-chain health metrics across a trader's open futures
+        positions. Falls back to representative mock data when the futures
+        contract isn't configured, so callers (e.g. the health check) don't
+        need to special-case an unconfigured environment.
         """
         if not self.is_valid_address(address):
             raise ValueError("Invalid Ethereum address")
         if not self.futures_contract:
             return self._get_mock_position_health(address)
+
         try:
-            position_data = self.futures_contract.functions.positions(address).call()
-            trader, size, is_long, entry_price = position_data
-            exists = size > 0
-            if not exists:
+            checksum = self.w3.to_checksum_address(address)
+            position_ids = self.get_user_position_ids(address)
+
+            open_positions: List[Dict[str, Any]] = []
+            total_margin_used = Decimal("0")
+
+            for position_id in position_ids:
+                details = self.futures_contract.functions.getPositionDetails(
+                    position_id
+                ).call()
+                (
+                    trader,
+                    underlying_asset,
+                    size,
+                    is_long,
+                    entry_price,
+                    margin,
+                    leverage,
+                    status,
+                ) = details
+
+                if _POSITION_STATUS[status] != "active":
+                    continue
+
+                size_dec = Decimal(size) / Decimal(10**18)
+                margin_dec = Decimal(margin) / Decimal(10**18)
+                entry_price_dec = Decimal(entry_price)
+                liquidation_price = self._calculate_liquidation_price(
+                    entry_price_dec, is_long, size_dec
+                )
+
+                open_positions.append(
+                    {
+                        "position_id": position_id,
+                        "underlying_asset": underlying_asset,
+                        "position_type": "long" if is_long else "short",
+                        "size": size_dec,
+                        "entry_price": entry_price_dec,
+                        "margin": margin_dec,
+                        "leverage": leverage,
+                        "liquidation_price": liquidation_price,
+                        "status": "open",
+                    }
+                )
+                total_margin_used += margin_dec
+
+            if not open_positions:
                 return {
                     "address": address,
                     "positions": [],
                     "total_margin_used": Decimal("0"),
-                    "total_margin_available": Decimal("1000"),
+                    "total_margin_available": Decimal("0"),
                     "health_ratio": float("inf"),
                     "liquidation_risk": "none",
                 }
-            size_dec = Decimal(str(size))
-            entry_price_dec = Decimal(str(entry_price))
-            liquidation_price = self._calculate_liquidation_price(
-                entry_price_dec, is_long, size_dec
-            )
-            current_price = (
-                entry_price_dec * Decimal("1.05")
-                if is_long
-                else entry_price_dec * Decimal("0.95")
-            )
-            unrealized_pnl = self._calculate_unrealized_pnl(
-                size_dec, entry_price_dec, current_price, is_long
-            )
-            margin_requirement = size_dec * entry_price_dec * Decimal("0.1")
-            margin_available = Decimal("1000")
+
+            profile = self.futures_contract.functions.userProfiles(checksum).call()
+            # UserProfile field order: isKYCVerified, complianceStatus, riskScore,
+            # maxPositionSize, totalMargin, availableMargin, totalExposure, ...
+            available_margin = Decimal(profile[5]) / Decimal(10**18)
             health_ratio = (
-                float(margin_available / margin_requirement)
-                if margin_requirement > 0
+                float(available_margin / total_margin_used)
+                if total_margin_used > 0
                 else float("inf")
             )
-            liquidation_risk = self._assess_liquidation_risk(health_ratio)
-            position = {
-                "position_id": f"pos_{address[:10]}",
-                "symbol": "BTC-USD",
-                "position_type": "long" if is_long else "short",
-                "size": size_dec,
-                "entry_price": entry_price_dec,
-                "current_price": current_price,
-                "liquidation_price": liquidation_price,
-                "margin_requirement": margin_requirement,
-                "unrealized_pnl": unrealized_pnl,
-                "status": "open",
-            }
+
             return {
                 "address": address,
-                "positions": [position],
-                "total_margin_used": margin_requirement,
-                "total_margin_available": margin_available,
+                "positions": open_positions,
+                "total_margin_used": total_margin_used,
+                "total_margin_available": available_margin,
                 "health_ratio": health_ratio,
-                "liquidation_risk": liquidation_risk,
+                "liquidation_risk": self._assess_liquidation_risk(health_ratio),
             }
-        except ContractLogicError as e:
-            logger.error(f"Contract logic error for {address}: {e}")
-            raise Exception(f"Contract call failed: {str(e)}")
-        except Web3Exception as e:
-            logger.error(f"Web3 error for {address}: {e}")
+        except (ContractLogicError, Web3Exception) as e:
+            logger.error(f"Contract error fetching position health for {address}: {e}")
             raise Exception(f"Blockchain error: {str(e)}")
         except Exception as e:
-            logger.error(f"Unexpected error fetching position for {address}: {e}")
-            raise Exception(f"Error fetching position: {str(e)}")
+            logger.error(
+                f"Unexpected error fetching position health for {address}: {e}"
+            )
+            raise Exception(f"Error fetching position health: {str(e)}")
 
     def _get_mock_position_health(self, address: str) -> Dict[str, Any]:
-        """Return mock position health data for testing"""
+        """Representative position health data for when no contract is configured"""
         return {
             "address": address,
             "positions": [
                 {
-                    "position_id": f"mock_pos_{address[:10]}",
-                    "symbol": "BTC-USD",
+                    "position_id": 0,
+                    "underlying_asset": ZERO_ADDRESS,
                     "position_type": "long",
                     "size": Decimal("0.1"),
                     "entry_price": Decimal("30000"),
-                    "current_price": Decimal("31500"),
+                    "margin": Decimal("300"),
+                    "leverage": 10,
                     "liquidation_price": Decimal("27000"),
-                    "margin_requirement": Decimal("3000"),
-                    "unrealized_pnl": Decimal("150"),
                     "status": "open",
                 }
             ],
-            "total_margin_used": Decimal("3000"),
-            "total_margin_available": Decimal("7000"),
+            "total_margin_used": Decimal("300"),
+            "total_margin_available": Decimal("700"),
             "health_ratio": 2.33,
             "liquidation_risk": "low",
         }
@@ -279,23 +327,19 @@ class BlockchainService:
     def _calculate_liquidation_price(
         self, entry_price: Decimal, is_long: bool, size: Decimal
     ) -> Decimal:
-        """Placeholder for sophisticated liquidation price calculation"""
+        """Rough liquidation price estimate for display purposes only.
+
+        This mirrors the contract's approximate maintenance-margin buffer;
+        it is not a substitute for calling `_isLiquidationEligible` on-chain,
+        which is what actually gates liquidation.
+        """
         if is_long:
             return entry_price * Decimal("0.9")
         else:
             return entry_price * Decimal("1.1")
 
-    def _calculate_unrealized_pnl(
-        self, size: Decimal, entry_price: Decimal, current_price: Decimal, is_long: bool
-    ) -> Decimal:
-        """Placeholder for unrealized PnL calculation"""
-        if is_long:
-            return size * (current_price - entry_price)
-        else:
-            return size * (entry_price - current_price)
-
     def _assess_liquidation_risk(self, health_ratio: float) -> str:
-        """Placeholder for liquidation risk assessment"""
+        """Bucket a margin health ratio into a human-readable risk level"""
         if health_ratio > 3.0:
             return "very_low"
         elif health_ratio > 1.5:
@@ -305,125 +349,161 @@ class BlockchainService:
         else:
             return "high"
 
-    def deposit_margin(
-        self, user_address: str, amount: Decimal, private_key: str
+    # ── Futures: unsigned transaction builders ──────────────────────────
+
+    def _build_tx(
+        self, contract_function: Any, from_address: str, value_wei: int = 0
     ) -> Dict[str, Any]:
-        """
-        Function to deposit margin to the futures contract.
-
-        Args:
-            user_address (str): The user's Ethereum address.
-            amount (Decimal): The amount of margin to deposit (in ETH).
-            private_key (str): The user's private key for signing the transaction.
-
-        Returns:
-            Dict[str, Any]: Transaction details.
-
-        Raises:
-            Exception: If the transaction fails.
-        """
-        if not self.futures_contract:
-            raise Exception("Futures contract not initialized. Cannot deposit margin.")
-        if not self.is_valid_address(user_address):
-            raise ValueError("Invalid user address.")
-        if amount <= 0:
-            raise ValueError("Deposit amount must be positive.")
+        """Build an unsigned transaction dict for the caller's wallet to sign"""
+        if not self.w3:
+            raise Exception("Blockchain connection not available")
+        tx: Dict[str, Any] = {
+            "from": from_address,
+            "nonce": self.w3.eth.get_transaction_count(from_address),
+            "gasPrice": self.w3.eth.gas_price,
+            "chainId": settings.ethereum_chain_id,
+        }
+        if value_wei:
+            tx["value"] = value_wei
+        built = contract_function.build_transaction(tx)
         try:
-            amount_wei = self.w3.to_wei(amount, "ether")  # type: ignore
-            tx = self.futures_contract.functions.depositMargin(
-                user_address, amount_wei
-            ).build_transaction(
-                {
-                    "from": user_address,
-                    "value": amount_wei,
-                    "nonce": self.w3.eth.get_transaction_count(user_address),  # type: ignore
-                    "gasPrice": self.w3.eth.gas_price,  # type: ignore
-                }
-            )
-            signed_tx = self.w3.eth.account.sign_transaction(tx, private_key)  # type: ignore
-            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)  # type: ignore
-            logger.info(f"Deposit transaction sent. Hash: {tx_hash.hex()}")
-            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)  # type: ignore
-            if receipt.status == 1:
-                logger.info("Deposit successful.")
-                return {
-                    "status": "success",
-                    "tx_hash": tx_hash.hex(),
-                    "receipt": receipt,
-                }
-            else:
-                raise Exception("Transaction failed on the blockchain.")
-        except Web3Exception as e:
-            logger.error(f"Web3 error during deposit: {e}")
-            raise Exception(f"Blockchain transaction failed: {str(e)}")
+            built["gas"] = self.w3.eth.estimate_gas(built)
         except Exception as e:
-            logger.error(f"Unexpected error during deposit: {e}")
-            raise Exception(f"Deposit failed: {str(e)}")
+            logger.warning(f"Gas estimation failed, leaving gas unset: {e}")
+        return built
 
-    def withdraw_margin(
-        self, user_address: str, amount: Decimal, private_key: str
+    def build_deposit_margin_tx(
+        self, user_address: str, amount: Decimal, asset_address: str = ZERO_ADDRESS
     ) -> Dict[str, Any]:
-        """
-        Function to withdraw margin from the futures contract.
-
-        Args:
-            user_address (str): The user's Ethereum address.
-            amount (Decimal): The amount of margin to withdraw (in ETH).
-            private_key (str): The user's private key for signing the transaction.
-
-        Returns:
-            Dict[str, Any]: Transaction details.
-
-        Raises:
-            Exception: If the transaction fails.
-        """
+        """Build an unsigned depositMargin transaction for the trader to sign"""
         if not self.futures_contract:
-            raise Exception("Futures contract not initialized. Cannot withdraw margin.")
+            raise Exception("Futures contract not configured")
         if not self.is_valid_address(user_address):
-            raise ValueError("Invalid user address.")
+            raise ValueError("Invalid user address")
         if amount <= 0:
-            raise ValueError("Withdrawal amount must be positive.")
+            raise ValueError("Deposit amount must be positive")
+
+        amount_wei = self.w3.to_wei(amount, "ether")
+        checksum_user = self.w3.to_checksum_address(user_address)
+        checksum_asset = self.w3.to_checksum_address(asset_address)
+        value_wei = amount_wei if asset_address.lower() == ZERO_ADDRESS else 0
+
+        fn = self.futures_contract.functions.depositMargin(checksum_asset, amount_wei)
+        return self._build_tx(fn, checksum_user, value_wei)
+
+    def build_withdraw_margin_tx(
+        self, user_address: str, amount: Decimal, asset_address: str = ZERO_ADDRESS
+    ) -> Dict[str, Any]:
+        """Build an unsigned withdrawMargin transaction for the trader to sign"""
+        if not self.futures_contract:
+            raise Exception("Futures contract not configured")
+        if not self.is_valid_address(user_address):
+            raise ValueError("Invalid user address")
+        if amount <= 0:
+            raise ValueError("Withdrawal amount must be positive")
+
+        amount_wei = self.w3.to_wei(amount, "ether")
+        checksum_user = self.w3.to_checksum_address(user_address)
+        checksum_asset = self.w3.to_checksum_address(asset_address)
+
+        fn = self.futures_contract.functions.withdrawMargin(checksum_asset, amount_wei)
+        return self._build_tx(fn, checksum_user)
+
+    # ── Options: reads ───────────────────────────────────────────────────
+
+    def get_user_option_ids(self, address: str) -> List[int]:
+        """Get all on-chain option IDs a trader has written or purchased"""
+        if not self.is_valid_address(address):
+            raise ValueError("Invalid Ethereum address")
+        if not self.options_contract:
+            return []
         try:
-            amount_wei = self.w3.to_wei(amount, "ether")  # type: ignore
-            tx = self.futures_contract.functions.withdrawMargin(
-                user_address, amount_wei
-            ).build_transaction(
-                {
-                    "from": user_address,
-                    "nonce": self.w3.eth.get_transaction_count(user_address),  # type: ignore
-                    "gasPrice": self.w3.eth.gas_price,  # type: ignore
-                }
-            )
-            signed_tx = self.w3.eth.account.sign_transaction(tx, private_key)  # type: ignore
-            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)  # type: ignore
-            logger.info(f"Withdrawal transaction sent. Hash: {tx_hash.hex()}")
-            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)  # type: ignore
-            if receipt.status == 1:
-                logger.info("Withdrawal successful.")
-                return {
-                    "status": "success",
-                    "tx_hash": tx_hash.hex(),
-                    "receipt": receipt,
-                }
-            else:
-                raise Exception("Transaction failed on the blockchain.")
-        except Web3Exception as e:
-            logger.error(f"Web3 error during withdrawal: {e}")
-            raise Exception(f"Blockchain transaction failed: {str(e)}")
-        except Exception as e:
-            logger.error(f"Unexpected error during withdrawal: {e}")
-            raise Exception(f"Withdrawal failed: {str(e)}")
+            checksum = self.w3.to_checksum_address(address)
+            return list(self.options_contract.functions.getUserOptions(checksum).call())
+        except (ContractLogicError, Web3Exception) as e:
+            logger.error(f"Contract error fetching options for {address}: {e}")
+            raise Exception(f"Failed to fetch options: {str(e)}")
+
+    def get_option(self, option_id: int) -> Optional[Dict[str, Any]]:
+        """Fetch a single on-chain option's full details"""
+        if not self.options_contract:
+            return None
+        try:
+            opt = self.options_contract.functions.getOption(option_id).call()
+            (
+                opt_id,
+                writer,
+                holder,
+                opt_type,
+                opt_style,
+                strike_price,
+                premium,
+                expiration_time,
+                collateral,
+                status,
+                underlying_asset,
+                contract_size,
+                creation_time,
+                risk_hash,
+            ) = opt
+            return {
+                "option_id": opt_id,
+                "writer": writer,
+                "holder": holder,
+                "option_type": _OPTION_TYPE[opt_type],
+                "option_style": _OPTION_STYLE[opt_style],
+                "strike_price": strike_price,
+                "premium": Decimal(premium) / Decimal(10**18),
+                "expiration_time": expiration_time,
+                "collateral": Decimal(collateral) / Decimal(10**18),
+                "status": _OPTION_STATUS[status],
+                "underlying_asset": underlying_asset,
+                "contract_size": Decimal(contract_size) / Decimal(10**18),
+                "creation_time": creation_time,
+            }
+        except (ContractLogicError, Web3Exception) as e:
+            logger.error(f"Contract error fetching option {option_id}: {e}")
+            raise Exception(f"Failed to fetch option: {str(e)}")
+
+    # ── Options: unsigned transaction builders ──────────────────────────
+
+    def build_purchase_option_tx(
+        self, buyer_address: str, option_id: int
+    ) -> Dict[str, Any]:
+        """Build an unsigned purchaseOption transaction for the buyer to sign"""
+        if not self.options_contract:
+            raise Exception("Options contract not configured")
+        if not self.is_valid_address(buyer_address):
+            raise ValueError("Invalid buyer address")
+
+        option = self.get_option(option_id)
+        if option is None:
+            raise ValueError(f"Option {option_id} not found")
+
+        premium_wei = int(option["premium"] * Decimal(10**18))
+        is_native = option["underlying_asset"].lower() == ZERO_ADDRESS
+        checksum_buyer = self.w3.to_checksum_address(buyer_address)
+
+        fn = self.options_contract.functions.purchaseOption(option_id)
+        return self._build_tx(fn, checksum_buyer, premium_wei if is_native else 0)
+
+    def build_exercise_option_tx(
+        self, holder_address: str, option_id: int
+    ) -> Dict[str, Any]:
+        """Build an unsigned exerciseOption transaction for the holder to sign"""
+        if not self.options_contract:
+            raise Exception("Options contract not configured")
+        if not self.is_valid_address(holder_address):
+            raise ValueError("Invalid holder address")
+
+        checksum_holder = self.w3.to_checksum_address(holder_address)
+        fn = self.options_contract.functions.exerciseOption(option_id)
+        return self._build_tx(fn, checksum_holder)
+
+    # ── Shared ────────────────────────────────────────────────────────────
 
     def get_transaction_status(self, tx_hash: str) -> Dict[str, Any]:
-        """
-        Get detailed status of a blockchain transaction.
-
-        Args:
-            tx_hash (str): The transaction hash.
-
-        Returns:
-            Dict[str, Any]: Detailed transaction status.
-        """
+        """Get detailed status of a submitted blockchain transaction"""
         if not self.is_connected():
             return {
                 "hash": tx_hash,
@@ -431,10 +511,10 @@ class BlockchainService:
                 "error": "Blockchain connection not available",
             }
         try:
-            receipt = self.w3.eth.get_transaction_receipt(tx_hash)  # type: ignore
+            receipt = self.w3.eth.get_transaction_receipt(tx_hash)
             if receipt is None:
                 return {"hash": tx_hash, "status": "pending"}
-            transaction = self.w3.eth.get_transaction(tx_hash)  # type: ignore
+            transaction = self.w3.eth.get_transaction(tx_hash)
             status = "success" if receipt.status == 1 else "failed"
             return {
                 "hash": tx_hash,
@@ -442,7 +522,7 @@ class BlockchainService:
                 "block_number": receipt.blockNumber,
                 "gas_used": receipt.gasUsed,
                 "gas_price": transaction.gasPrice,
-                "confirmations": self.w3.eth.block_number - receipt.blockNumber,  # type: ignore
+                "confirmations": self.w3.eth.block_number - receipt.blockNumber,
             }
         except Exception as e:
             logger.error(f"Error fetching transaction status for {tx_hash}: {e}")
