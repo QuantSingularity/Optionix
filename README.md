@@ -1,26 +1,25 @@
 # Optionix
 
-![CI/CD Status](https://img.shields.io/github/actions/workflow/status/quantsingularity/Optionix/cicd.yml?branch=main&label=CI/CD&logo=github)
-[![Test Coverage](https://img.shields.io/badge/coverage-81%25-brightgreen)](https://github.com/quantsingularity/Optionix/actions)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![CI/CD Status](https://img.shields.io/github/actions/workflow/status/quantsingularity/Optionix/cicd.yml?branch=main&label=CI%2FCD&logo=github)
 
-## Options Trading & Analytics Platform
+## Options Trading and Analytics Platform
 
-Optionix is a comprehensive options trading and analytics platform that combines traditional finance with blockchain technology. The platform provides advanced options pricing models, real-time market data, and AI-powered trading signals to help traders make informed decisions.
+Optionix is an options and futures trading platform: a FastAPI backend that prices options, tracks portfolios and risk, and reads and writes to deployed smart contracts, paired with a React web dashboard and a React Native (Expo) mobile app. A small scikit-learn volatility model backs one live endpoint, with a statistical fallback when no trained model is present.
 
 <div align="center">
-  <img src="docs/images/homepage.bmp" alt="Optionix HomePage" width="80%">
+  <img src="docs/images/homepage.bmp" alt="Optionix HomePage" width="100%">
 </div>
 
 ## Table of Contents
 
 - [Overview](#overview)
 - [Project Structure](#project-structure)
-- [Features](#features)
-- [Architecture](#architecture)
+- [Feature Status](#feature-status)
 - [Technology Stack](#technology-stack)
-- [Security and Compliance](#security-and-compliance)
-- [Getting Started](#getting-started)
+- [Architecture](#architecture)
+- [Installation and Setup](#installation-and-setup)
+- [Running the Stack](#running-the-stack)
+- [API Surface](#api-surface)
 - [Testing](#testing)
 - [CI/CD Pipeline](#cicd-pipeline)
 - [Documentation](#documentation)
@@ -29,281 +28,232 @@ Optionix is a comprehensive options trading and analytics platform that combines
 
 ## Overview
 
-Optionix is a next-generation options trading platform that leverages advanced algorithms, machine learning, and blockchain technology to provide traders with powerful tools for options analysis and trading.
+Optionix demonstrates an options trading workflow across a real, runnable codebase. The application tier (backend, smart contracts, and two clients) is wired and covered by tests, with the backend's blockchain service genuinely reading and writing to the deployed options and futures contracts through web3.py. A lightweight scikit-learn volatility model backs one live prediction endpoint; a separate TensorFlow training script exists for the same task but saves to a different file format than the one the live service loads, so it is not currently the model actually serving predictions.
 
 ## Project Structure
 
-The project is organized into several main components:
-
 ```
 Optionix/
-├── code/                   # Core backend logic, services, and shared utilities
-├── docs/                   # Project documentation
-├── infrastructure/         # DevOps, deployment, and infra-related code
-├── mobile-frontend/        # Mobile application
-├── web-frontend/           # Web dashboard
-├── scripts/                # Automation, setup, and utility scripts
-├── LICENSE                 # License information
-└── README.md               # Project overview and instructions
+├── code/
+│   ├── backend/                # FastAPI service: API, auth, services, DB
+│   │   ├── app/api/            # auth, market, trading, portfolio, analytics,
+│   │   │                       # risk, compliance, blockchain routers
+│   │   ├── app/services/       # pricing_engine, risk_assessment, model_service,
+│   │   │                       # blockchain_service, compliance_service
+│   │   ├── app/middleware/     # security, rate limiting, audit logging
+│   │   └── tests/              # Backend test suite (pytest)
+│   ├── blockchain/              # Hardhat project
+│   │   ├── contracts/          # OptionsContract, FuturesContract (Chainlink price feeds)
+│   │   └── test/               # Hardhat test suite
+│   └── ai_models/
+│       ├── create_model.py             # scikit-learn model used by the live API
+│       ├── generate_model_artifacts.py # Generates the .pkl (and optional .h5) artifacts
+│       ├── training_scripts/           # TensorFlow LSTM training script (separate artifact)
+│       └── quantitative/               # Black-Scholes and Monte Carlo reference implementations
+├── web-frontend/                # React (Webpack) dashboard
+├── mobile-frontend/              # React Native + Expo app
+├── infrastructure/               # Docker, Kubernetes, Terraform, Ansible, monitoring
+├── scripts/                      # Setup, run, test, and lint scripts
+├── docs/                         # Documentation (this directory)
+└── README.md
 ```
 
-## Features
+## Feature Status
 
-### Options Trading
+### Application tier (wired and tested)
 
-| Feature                        | Description                                                |
-| :----------------------------- | :--------------------------------------------------------- |
-| **Real-time Options Chain**    | Access to up-to-the-second options chain data              |
-| **Multi-leg Strategy Builder** | Tool for constructing complex multi-leg options strategies |
-| **One-click Trade Execution**  | Streamlined process for rapid trade execution              |
-| **Position Tracking**          | Detailed tracking and P&L analysis of current positions    |
-| **Historical Performance**     | Metrics and analysis of past trading performance           |
+| Component                | Details                                                                                                                                                                                                                                                          |
+| :----------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **API**                  | FastAPI backend exposing endpoints for auth, market data, trading, portfolio, analytics, risk, compliance, and blockchain. There is no `/api` or `/api/v1` prefix; routes sit directly under paths like `/trading` and `/market`.                                |
+| **Auth**                 | bcrypt password hashing, JWT access and refresh tokens, and TOTP-based MFA (pyotp). The signing key must be at least 32 characters; the shipped default already satisfies that check, so unlike some sibling projects it is not rejected outright in production. |
+| **Pricing engine**       | Black-Scholes Greeks and a Monte Carlo European-option pricer, both run in-process.                                                                                                                                                                              |
+| **Volatility model**     | A lightweight scikit-learn model (generated by a setup script, not committed to the repo) backs the `/market/volatility` endpoint, with a statistical fallback when no trained model file is present.                                                            |
+| **On-chain integration** | A real web3.py service that reads and writes to deployed options and futures contracts: positions, margin deposits and withdrawals, option purchase and exercise, and transaction lookups.                                                                       |
+| **Smart contracts**      | Hardhat-managed Solidity contracts for options and futures, each pulling prices through a genuine Chainlink `AggregatorV3Interface` feed.                                                                                                                        |
+| **Data layer**           | SQLAlchemy over MySQL, with Redis for caching and Alembic managing migrations.                                                                                                                                                                                   |
+| **Monitoring**           | Prometheus metrics (`/metrics`) and structured logging (structlog) are both genuinely wired into the running app, not just listed as dependencies.                                                                                                               |
+| **Web dashboard**        | React app (plain JavaScript, not TypeScript) covering Home, Dashboard, Trading, Portfolio, Analytics, Risk, Compliance, Wallet, Settings, and authentication screens.                                                                                            |
+| **Mobile app**           | React Native (Expo) app covering the same functional areas through React Navigation, with WalletConnect for mobile wallet connections.                                                                                                                           |
 
-### Analytics
+### Research tier (library modules)
 
-| Feature                      | Description                                                                      |
-| :--------------------------- | :------------------------------------------------------------------------------- |
-| **Volatility Surface**       | Visualization of the volatility surface                                          |
-| **Greeks Calculation**       | Calculation and visualization of options Greeks (Delta, Gamma, Theta, Vega, Rho) |
-| **Implied Volatility**       | In-depth analysis of implied volatility                                          |
-| **Strategy Payoff Diagrams** | Visual representation of options strategy payoff profiles                        |
-| **Risk/Reward Ratios**       | Calculations for risk and reward ratios                                          |
-
-### AI Features
-
-| Feature                       | Description                                              |
-| :---------------------------- | :------------------------------------------------------- |
-| **Volatility Prediction**     | Models for forecasting future market volatility          |
-| **Mispricing Detection**      | Algorithms to identify options that may be mispriced     |
-| **Market Sentiment**          | Analysis of market sentiment from various data sources   |
-| **Automated Trading Signals** | AI-generated signals for potential trading opportunities |
-| **Personalized Strategy**     | Tailored recommendations for trading strategies          |
-
-### Blockchain Integration
-
-| Feature                           | Description                                                     |
-| :-------------------------------- | :-------------------------------------------------------------- |
-| **Decentralized Contracts**       | Implementation of decentralized options contracts               |
-| **Smart Contract Settlement**     | Automated and secure trade settlement via smart contracts       |
-| **On-chain Verification**         | Transparent verification of options positions on the blockchain |
-| **Cross-chain Collateralization** | Support for using assets from different chains as collateral    |
-| **Transparent History**           | Immutable and transparent transaction history                   |
-
-## Architecture
-
-Optionix is built on a robust, microservices-based architecture designed for high performance, scalability, and financial-grade security.
-
-### Core Components
-
-| Component            | Description                                                                                               |
-| :------------------- | :-------------------------------------------------------------------------------------------------------- |
-| **Backend Services** | Core business logic, options pricing, AI models, and data processing. Built with Python/Rust and FastAPI. |
-| **Web Frontend**     | Primary user interface for trading and analytics, built with React and TypeScript.                        |
-| **Mobile Frontend**  | Native mobile application for on-the-go access, built with React Native.                                  |
-| **Blockchain Layer** | Smart contracts (Solidity) for decentralized options and on-chain verification.                           |
-| **Infrastructure**   | Managed by Kubernetes, Terraform, and Ansible for reliable, scalable deployment.                          |
+| Component                                        | Details                                                                                                                                     |
+| :----------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------ |
+| **TensorFlow volatility model**                  | An LSTM training script that saves a Keras `.h5` file, a different artifact format than the `.pkl` the live `model_service` actually loads. |
+| **Black-Scholes / Monte Carlo reference module** | A standalone quantitative module separate from the pricing engine the API calls, used for research and validation.                          |
 
 ## Technology Stack
 
-### Backend
+| Area                     | Technology                                                                                                        |
+| :----------------------- | :---------------------------------------------------------------------------------------------------------------- |
+| Blockchain               | Solidity, OpenZeppelin, Chainlink price feeds, Hardhat                                                            |
+| Backend API              | Python 3.11+, FastAPI, Uvicorn, Pydantic v2                                                                       |
+| Auth                     | bcrypt (passlib), python-jose (JWT), pyotp (MFA)                                                                  |
+| Blockchain client        | web3.py                                                                                                           |
+| Data layer               | SQLAlchemy 2, Alembic, MySQL, Redis                                                                               |
+| ML / Quant               | scikit-learn (live volatility model), TensorFlow (separate, disconnected training script)                         |
+| Monitoring               | prometheus-client, structlog                                                                                      |
+| Web frontend             | React 18, JavaScript, Webpack, styled-components, Chart.js, ethers.js 6                                           |
+| Mobile frontend          | React Native, Expo, React Navigation, React Native Paper, WalletConnect                                           |
+| Infrastructure           | Docker, Docker Compose, Kubernetes, Terraform (AWS), Ansible                                                      |
+| Monitoring stack (infra) | Prometheus, Grafana, MySQL and Redis exporters                                                                    |
+| CI/CD                    | GitHub Actions                                                                                                    |
+| Testing                  | pytest (backend), Hardhat (contracts), Jest (mobile); the web dashboard has Jest configured but no test files yet |
 
-| Component         | Technologies                                       |
-| :---------------- | :------------------------------------------------- |
-| **Language**      | Python, Rust (for performance-critical components) |
-| **Framework**     | FastAPI                                            |
-| **Database**      | PostgreSQL, TimescaleDB (for time-series data)     |
-| **Caching**       | Redis                                              |
-| **Message Queue** | RabbitMQ                                           |
-| **ML Framework**  | PyTorch, scikit-learn                              |
-| **Blockchain**    | Ethereum, Solidity                                 |
+## Architecture
 
-### Web Frontend
+```
+Clients
+  ├── web-frontend (React, plain JS)      ── HTTP/JSON ──┐
+  └── mobile-frontend (React Native)      ── HTTP/JSON ──┤
+                                                         ▼
+Backend (FastAPI, no /api prefix)
+  ├── Routers    auth, market, trading, portfolio, analytics,
+  │              risk, compliance, blockchain
+  ├── Middleware  security, rate limiting, audit logging (structlog)
+  ├── Services    pricing engine (Black-Scholes, Monte Carlo), volatility model
+  │              (scikit-learn, statistical fallback), blockchain (web3.py)
+  └── Data layer   MySQL (SQLAlchemy + Alembic), Redis
+  └── /metrics     Prometheus exposition endpoint
 
-| Component              | Technologies                   |
-| :--------------------- | :----------------------------- |
-| **Framework**          | React with TypeScript          |
-| **State Management**   | Redux Toolkit                  |
-| **Styling**            | Styled Components, TailwindCSS |
-| **Data Visualization** | D3.js, TradingView Charts      |
-| **Web3**               | ethers.js                      |
+Blockchain (Hardhat / Solidity)
+  OptionsContract · FuturesContract, both priced via Chainlink AggregatorV3Interface feeds
 
-### Mobile Frontend
+Research scripts (code/ai_models)
+  TensorFlow LSTM training script (separate .h5 artifact, not loaded by the live API)
+  Black-Scholes / Monte Carlo reference module
+```
 
-| Component            | Technologies       |
-| :------------------- | :----------------- |
-| **Framework**        | React Native       |
-| **State Management** | Redux Toolkit      |
-| **Navigation**       | React Navigation   |
-| **UI Components**    | React Native Paper |
-| **Charts**           | Victory Native     |
+See [docs/architecture.md](docs/architecture.md) for detail.
 
-### Infrastructure
+## Installation and Setup
 
-| Component            | Technologies        |
-| :------------------- | :------------------ |
-| **Containerization** | Docker              |
-| **Orchestration**    | Kubernetes          |
-| **CI/CD**            | GitHub Actions      |
-| **Monitoring**       | Prometheus, Grafana |
-| **Logging**          | ELK Stack           |
-
-## Security and Compliance
-
-The infrastructure is designed to meet stringent financial industry standards, including principles from **PCI DSS**, **SOC 2**, **GDPR**, **NIST Cybersecurity Framework**, and **ISO 27001**.
-
-### Key Security Measures
-
-| Category              | Measure                                        | Description                                                                                                    |
-| :-------------------- | :--------------------------------------------- | :------------------------------------------------------------------------------------------------------------- |
-| **Network Security**  | Micro-segmentation, IDPS, DDoS Protection, WAF | Granular network policies and perimeter defense to limit attack surface.                                       |
-| **Data Security**     | Encryption at Rest and in Transit, DLP         | All sensitive data is encrypted, and Data Loss Prevention is implemented.                                      |
-| **Endpoint Security** | Continuous Vulnerability Management            | Regular scanning and patching for all servers, containers, and applications.                                   |
-| **IAM**               | Least Privilege, MFA, RBAC                     | Strict access controls, Multi-Factor Authentication, and Role-Based Access Control for all users and services. |
-
-### Key Compliance Features
-
-| Category          | Feature                                     | Description                                                                                                 |
-| :---------------- | :------------------------------------------ | :---------------------------------------------------------------------------------------------------------- |
-| **Auditing**      | Centralized Logging, Comprehensive Auditing | Immutable logs and detailed audit trails for all administrative and data access actions.                    |
-| **Resilience**    | Disaster Recovery (DR) and BC Plan          | Regularly tested plans for continuous operation and rapid recovery from major outages.                      |
-| **Configuration** | Version Control, Automated Drift Detection  | All infrastructure as code (IaC) is version-controlled with automated tools to prevent configuration drift. |
-| **Assessment**    | Regular Security and Compliance Audits      | Periodic internal and external assessments, penetration testing, and vulnerability assessments.             |
-
-## Getting Started
-
-### Backend Setup
-
-| Step                     | Command/Action                               |
-| :----------------------- | :------------------------------------------- |
-| **Navigate**             | `cd code/backend`                            |
-| **Install Dependencies** | `pip install -r requirements.txt`            |
-| **Start Server**         | `uvicorn app:app --host 0.0.0.0 --port 8000` |
-
-### Frontend Setup
-
-| Step                     | Command/Action     |
-| :----------------------- | :----------------- |
-| **Navigate**             | `cd code/frontend` |
-| **Install Dependencies** | `npm install`      |
-| **Start Dev Server**     | `npm start`        |
-| **Build Production**     | `npm run build`    |
-
-For a quick setup of the entire application:
+Prerequisites: Python 3.11+ and Node.js 18+.
 
 ```bash
-# Clone the repository
 git clone https://github.com/quantsingularity/Optionix.git
 cd Optionix
 
-# Run the setup script
-./setup_optionix_env.sh
+# Blockchain
+cd code/blockchain
+npm install
 
-# Start the application
-./run_optionix.sh
+# Backend
+cd ../backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# Web frontend
+cd ../../web-frontend
+npm install
+
+# Mobile frontend
+cd ../mobile-frontend
+npm install
 ```
+
+For an automated setup:
+
+```bash
+git clone https://github.com/quantsingularity/Optionix.git
+cd Optionix
+./scripts/setup_optionix_env.sh
+./scripts/run_optionix.sh
+```
+
+Full, environment-specific instructions are in [docs/INSTALLATION.md](docs/INSTALLATION.md).
+
+## Running the Stack
+
+```bash
+# 1) Supporting services (from infrastructure/, Docker required)
+docker compose up -d db redis
+
+# 2) Local chain (from code/blockchain)
+npx hardhat node                   # local chain at http://127.0.0.1:8545
+
+# 3) Generate a volatility model artifact (from code/ai_models, optional but recommended)
+python generate_model_artifacts.py
+
+# 4) Backend (from code/backend, venv active)
+uvicorn app.main:app --reload      # serves http://0.0.0.0:8000, docs at /docs
+
+# 5) Web dashboard (from web-frontend)
+npm start                          # opens a Webpack dev server
+
+# 6) Mobile app (from mobile-frontend)
+npm start                          # press w for web, a for Android, i for iOS
+```
+
+See [docs/USAGE.md](docs/USAGE.md) and [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+
+## API Surface
+
+Base URL `http://localhost:8000`. Interactive docs at `/docs` (Swagger) and `/redoc`. Metrics at `/metrics`.
+
+| Group      | Prefix        | Highlights                                                                                                         |
+| :--------- | :------------ | :----------------------------------------------------------------------------------------------------------------- |
+| Auth       | `/auth`       | `register`, `login`, `me`, `refresh`                                                                               |
+| Market     | `/market`     | `volatility`                                                                                                       |
+| Trading    | `/trading`    | `accounts`, `orders`, `positions`, `accounts/{id}/summary`                                                         |
+| Portfolio  | `/portfolio`  | `overview`, `allocation`, `performance`, `risk-metrics`, `positions/greeks-summary`                                |
+| Analytics  | `/analytics`  | `price`, `implied-volatility`, `volatility-surface`, `greeks/{symbol}`                                             |
+| Risk       | `/risk`       | `var`, `stress-test`, `greeks/portfolio`, `greeks/heatmap`, `limits`, `circuit-breakers`                           |
+| Compliance | `/compliance` | `kyc/submit`, `sanctions/check`, `aml/alerts`, `gdpr/request`, `audit-logs`                                        |
+| Blockchain | `/blockchain` | `wallet/{address}/balance`, `wallet/{address}/positions`, `margin/deposit`, `options/purchase`, `options/exercise` |
+
+Full request and response shapes are in [docs/API.md](docs/API.md).
 
 ## Testing
 
-The project maintains comprehensive test coverage across all components to ensure reliability and accuracy.
-
-### Test Coverage
-
-| Component              | Coverage | Status |
-| :--------------------- | :------- | :----- |
-| Backend API            | 85%      | ✅     |
-| Options Pricing Engine | 90%      | ✅     |
-| Frontend Components    | 78%      | ✅     |
-| Blockchain Integration | 75%      | ✅     |
-| AI Models              | 77%      | ✅     |
-| Overall                | 81%      | ✅     |
-
-### Backend Testing
-
-| Test Type             | Description                    |
-| :-------------------- | :----------------------------- |
-| **Unit Tests**        | For API endpoints using pytest |
-| **Integration Tests** | For blockchain interaction     |
-| **Performance Tests** | For options pricing algorithms |
-
-### Frontend Testing
-
-| Test Type            | Description                      |
-| :------------------- | :------------------------------- |
-| **Component Tests**  | Using React Testing Library      |
-| **End-to-end Tests** | With Cypress                     |
-| **State Management** | Tests for state management logic |
-
-### AI Model Testing
-
-| Test Type                    | Description                       |
-| :--------------------------- | :-------------------------------- |
-| **Accuracy Validation**      | Validation of model accuracy      |
-| **Backtesting**              | Against historical data           |
-| **Performance Benchmarking** | Benchmarking of model performance |
-
-To run tests:
-
 ```bash
-# Backend tests
-cd code/backend
+# Smart contracts (from code/blockchain)
+npx hardhat test
+
+# Backend (from code/backend)
 pytest
 
-# Frontend tests
-cd code/frontend
+# Web (from web-frontend)
 npm test
 
-# AI model tests
-cd code/ai_models
-python -m unittest discover
-
-# Run all tests with the convenience script
-./test_backend.sh
+# Mobile (from mobile-frontend)
+npm test
 ```
+
+The backend suite (15 files) covers the API routers, pricing engine, and services. The Hardhat suite covers the options and futures contracts. The mobile app has real Jest tests for its auth context and formatting utilities. The web dashboard has Jest configured but no test files yet, so it is not currently exercised in CI.
 
 ## CI/CD Pipeline
 
-Optionix uses GitHub Actions for continuous integration and deployment:
+GitHub Actions (`.github/workflows/cicd.yml`) runs four jobs on push, pull request, and manual dispatch:
 
-| Stage                | Control Area                    | Institutional-Grade Detail                                                              |
-| :------------------- | :------------------------------ | :-------------------------------------------------------------------------------------- |
-| **Formatting Check** | Change Triggers                 | Enforced on all `push` and `pull_request` events to `main` and `develop`                |
-|                      | Manual Oversight                | On-demand execution via controlled `workflow_dispatch`                                  |
-|                      | Source Integrity                | Full repository checkout with complete Git history for auditability                     |
-|                      | Python Runtime Standardization  | Python 3.10 with deterministic dependency caching                                       |
-|                      | Backend Code Hygiene            | `autoflake` to detect unused imports/variables using non-mutating diff-based validation |
-|                      | Backend Style Compliance        | `black --check` to enforce institutional formatting standards                           |
-|                      | Non-Intrusive Validation        | Temporary workspace comparison to prevent unauthorized source modification              |
-|                      | Node.js Runtime Control         | Node.js 18 with locked dependency installation via `npm ci`                             |
-|                      | Web Frontend Formatting Control | Prettier checks for web-facing assets                                                   |
-|                      | Mobile Frontend Formatting      | Prettier enforcement for mobile application codebases                                   |
-|                      | Documentation Governance        | Repository-wide Markdown formatting enforcement                                         |
-|                      | Infrastructure Configuration    | Prettier validation for YAML/YML infrastructure definitions                             |
-|                      | Compliance Gate                 | Any formatting deviation fails the pipeline and blocks merge                            |
+| Job                           | Depends on          | What it does                                                                       |
+| :---------------------------- | :------------------ | :--------------------------------------------------------------------------------- |
+| Code Quality Checks           | -                   | Python formatter checks (autoflake, black) and a repository-wide Prettier check    |
+| Backend Tests                 | Code Quality Checks | Runs the pytest suite with coverage and uploads the coverage report as an artifact |
+| Frontend Build                | Code Quality Checks | Installs dependencies and produces the production web build (no test step)         |
+| Smart Contract Compile & Test | Code Quality Checks | Compiles the contracts with Hardhat and runs the contract test suite               |
+
+There is currently no CI job for the mobile app.
 
 ## Documentation
 
-| Document                    | Path                 | Description                                                    |
-| :-------------------------- | :------------------- | :------------------------------------------------------------- |
-| **README**                  | `README.md`          | High-level overview, project scope, and repository entry point |
-| **Installation Guide**      | `INSTALLATION.md`    | Step-by-step installation and environment setup                |
-| **API Reference**           | `API.md`             | Detailed documentation for all API endpoints                   |
-| **CLI Reference**           | `CLI.md`             | Command-line interface usage, commands, and examples           |
-| **User Guide**              | `USAGE.md`           | Comprehensive end-user guide, workflows, and examples          |
-| **Architecture Overview**   | `ARCHITECTURE.md`    | System architecture, components, and design rationale          |
-| **Configuration Guide**     | `CONFIGURATION.md`   | Configuration options, environment variables, and tuning       |
-| **Feature Matrix**          | `FEATURE_MATRIX.md`  | Feature coverage, capabilities, and roadmap alignment          |
-| **Contributing Guidelines** | `CONTRIBUTING.md`    | Contribution workflow, coding standards, and PR requirements   |
-| **Troubleshooting**         | `TROUBLESHOOTING.md` | Common issues, diagnostics, and remediation steps              |
+| Document                                           | Contents                               |
+| :------------------------------------------------- | :------------------------------------- |
+| [docs/README.md](docs/README.md)                   | Documentation index                    |
+| [docs/architecture.md](docs/architecture.md)       | System architecture                    |
+| [docs/API.md](docs/API.md)                         | REST API reference                     |
+| [docs/INSTALLATION.md](docs/INSTALLATION.md)       | Setup for all components               |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md)     | Environment variables and config       |
+| [docs/USAGE.md](docs/USAGE.md)                     | Running and using the platform         |
+| [docs/CLI.md](docs/CLI.md)                         | Helper scripts reference               |
+| [docs/FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md)   | Feature status, implemented vs planned |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common issues and fixes                |
+| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)       | Contribution guide                     |
+| [docs/examples/](docs/examples/)                   | Worked examples                        |
 
 ## Contributing
 
-| Step             | Command/Action                                                         |
-| :--------------- | :--------------------------------------------------------------------- |
-| **Fork**         | Fork the repository                                                    |
-| **Branch**       | Create your feature branch (`git checkout -b feature/amazing-feature`) |
-| **Commit**       | Commit your changes (`git commit -m 'Add some amazing feature'`)       |
-| **Push**         | Push to the branch (`git push origin feature/amazing-feature`)         |
-| **Pull Request** | Open a Pull Request                                                    |
+See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 
 ## License
 
