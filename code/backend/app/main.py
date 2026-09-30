@@ -66,7 +66,7 @@ app = FastAPI(
 )
 
 # ── Middleware (order matters: last added = outermost) ──────────────────────
-# TrustedHostMiddleware must not run during testing — TestClient sends host
+# TrustedHostMiddleware must not run during testing - TestClient sends host
 # "testserver" which would be rejected with 400 Invalid host header.
 # Only enforce in staging/production where real hostnames are known.
 if settings.environment in ("staging", "production"):
@@ -77,7 +77,7 @@ app.add_middleware(RequestValidationMiddleware)
 app.add_middleware(AuditLoggingMiddleware)
 # CORSMiddleware must be added LAST so it is the outermost layer and still
 # attaches Access-Control-Allow-* headers to responses that other
-# middleware (rate limiting, request validation) short-circuit early —
+# middleware (rate limiting, request validation) short-circuit early -
 # otherwise the browser drops those responses as CORS failures and the
 # frontend sees a generic "Network Error" instead of the real 4xx detail.
 app.add_middleware(
@@ -92,7 +92,7 @@ app.add_middleware(
 app.include_router(api_router)
 
 # Prometheus metrics endpoint (served on the same port as the rest of the
-# API — the Kubernetes Deployment's prometheus.io/port annotation already
+# API - the Kubernetes Deployment's prometheus.io/port annotation already
 # points at 8000, not a separate metrics port).
 app.mount("/metrics", make_asgi_app())
 

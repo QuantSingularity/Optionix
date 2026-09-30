@@ -146,7 +146,7 @@ resource "aws_wafv2_web_acl" "optionix_waf" {
     allow {}
   }
 
-  # Rate limiting rule — standalone rules use `action`, not `override_action`
+  # Rate limiting rule - standalone rules use `action`, not `override_action`
   rule {
     name     = "RateLimitRule"
     priority = 1
@@ -175,7 +175,7 @@ resource "aws_wafv2_web_acl" "optionix_waf" {
     }
   }
 
-  # AWS Managed Rules — rule group references require `override_action`
+  # AWS Managed Rules - rule group references require `override_action`
   dynamic "rule" {
     for_each = var.waf_rules
     content {

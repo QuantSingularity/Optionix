@@ -263,7 +263,7 @@ build_app() {
     if [ -f "package.json" ]; then
       npm ci
       # Expo/React Native projects don't have a "build" script the way CRA
-      # apps do — `expo export` produces a static bundle, which is the
+      # apps do - `expo export` produces a static bundle, which is the
       # closest equivalent to a production "build" step in CI.
       npx expo export --platform web --output-dir dist || \
         step_error "Mobile build failed"

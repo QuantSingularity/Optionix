@@ -97,7 +97,7 @@ make test-cov       # with HTML coverage report
 | `SECRET_KEY`     | ✅       | ≥ 32 random chars                                    |
 | `ENCRYPTION_KEY` | ✅       | Exactly 32 chars                                     |
 | `DATABASE_URL`   | ✅       | PostgreSQL in prod; SQLite auto-used in tests        |
-| `ENVIRONMENT`    | —        | `development` / `staging` / `production` / `testing` |
+| `ENVIRONMENT`    | -        | `development` / `staging` / `production` / `testing` |
 
 See `.env.example` for the full list.
 
@@ -105,13 +105,13 @@ See `.env.example` for the full list.
 
 | Method | Path                 | Auth | Description           |
 | ------ | -------------------- | ---- | --------------------- |
-| GET    | `/`                  | —    | Welcome / status      |
-| GET    | `/health`            | —    | Full service health   |
-| POST   | `/auth/register`     | —    | Create account        |
-| POST   | `/auth/login`        | —    | Login → JWT pair      |
+| GET    | `/`                  | -    | Welcome / status      |
+| GET    | `/health`            | -    | Full service health   |
+| POST   | `/auth/register`     | -    | Create account        |
+| POST   | `/auth/login`        | -    | Login → JWT pair      |
 | GET    | `/auth/me`           | 🔒   | Current user profile  |
-| POST   | `/auth/refresh`      | —    | Refresh access token  |
-| POST   | `/market/volatility` | —    | Volatility prediction |
+| POST   | `/auth/refresh`      | -    | Refresh access token  |
+| POST   | `/market/volatility` | -    | Volatility prediction |
 
 ## Docker
 

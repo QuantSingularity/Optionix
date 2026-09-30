@@ -269,7 +269,7 @@ run_benchmarks() {
   fi
 
   # Define benchmark scenarios. These must be real, unauthenticated, GET
-  # endpoints that actually exist on the backend — most Optionix routes
+  # endpoints that actually exist on the backend - most Optionix routes
   # (trading/portfolio/analytics/risk/compliance) require a Bearer token and
   # aren't suitable for a plain `ab` GET benchmark.
   declare -A ENDPOINTS

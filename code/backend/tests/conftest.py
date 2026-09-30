@@ -17,7 +17,7 @@ os.environ["SECRET_KEY"] = "test-secret-key-that-is-at-least-32-chars-long"
 os.environ["ENCRYPTION_KEY"] = "TestEncryptionKey1234567890!!!!!"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
-import app.data_protection  # noqa: F401 — registers ORM models with Base
+import app.data_protection  # noqa: F401 - registers ORM models with Base
 import pytest
 from app.database import get_db
 from app.main import app  # FastAPI application instance

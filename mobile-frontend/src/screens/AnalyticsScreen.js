@@ -128,7 +128,7 @@ const OptionPricer = () => {
               ["Gamma", result.gamma.toFixed(4)],
               ["Theta", result.theta.toFixed(4)],
               ["Vega", result.vega.toFixed(4)],
-              ["Rho", result.rho != null ? result.rho.toFixed(4) : "—"],
+              ["Rho", result.rho != null ? result.rho.toFixed(4) : "-"],
             ]}
           />
         </View>

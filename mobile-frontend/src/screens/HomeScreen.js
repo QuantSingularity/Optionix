@@ -39,7 +39,7 @@ const HomeScreen = ({ navigation }) => (
           <Text style={styles.heroAccent}>institutional discipline</Text>
         </Text>
         <Text style={styles.heroSubtitle}>
-          Real-time pricing, portfolio risk, and compliance tooling — all in one
+          Real-time pricing, portfolio risk, and compliance tooling - all in one
           platform.
         </Text>
       </View>

@@ -10,7 +10,7 @@ describe("format utilities", () => {
   });
 
   test("formatCurrency handles non-numeric input gracefully", () => {
-    expect(formatCurrency("not-a-number")).toBe("—");
+    expect(formatCurrency("not-a-number")).toBe("-");
   });
 
   test("formatPercent appends a percent sign", () => {

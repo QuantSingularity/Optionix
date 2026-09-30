@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 OUTPUT_DIR="./docs/generated"
 CODE_DIR="./code"
 # web-frontend and mobile-frontend live at the project root, as siblings of
-# code/ (which only contains backend/ai_models/blockchain) — NOT under code/.
+# code/ (which only contains backend/ai_models/blockchain) - NOT under code/.
 WEB_FRONTEND_DIR="./web-frontend"
 MOBILE_FRONTEND_DIR="./mobile-frontend"
 INCLUDE_PRIVATE=false
@@ -124,7 +124,7 @@ check_requirements() {
       if [ -d "$CODE_DIR/backend" ]; then
         # Python API docs below are generated via plain grep/sed docstring
         # parsing, not pydoc, so this only needs python3 itself to exist
-        # (and even that isn't strictly required by the parsing logic) —
+        # (and even that isn't strictly required by the parsing logic) -
         # it's a lightweight sanity check, not a hard blocker.
         if command_exists python3; then
           step_success "python3 is installed"

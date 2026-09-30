@@ -9,7 +9,7 @@ try {
   const env = require("@env");
   if (env?.API_BASE_URL) API_BASE_URL = env.API_BASE_URL;
 } catch {
-  // @env not configured — fall back to the default above.
+  // @env not configured - fall back to the default above.
 }
 
 export { API_BASE_URL };

@@ -157,7 +157,7 @@ const RiskScreen = () => {
           <View style={styles.miniStat}>
             <StatLabel style={{ marginBottom: 4 }}>Status</StatLabel>
             <Badge tone={LIMIT_TONE[limits?.status] || "neutral"}>
-              {limits?.status || "—"}
+              {limits?.status || "-"}
             </Badge>
           </View>
         </View>

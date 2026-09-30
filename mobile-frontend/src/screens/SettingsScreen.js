@@ -70,12 +70,12 @@ const SettingsScreen = () => {
           <View style={{ width: "50%", padding: 6 }}>
             <StatLabel style={{ marginBottom: 4 }}>Name</StatLabel>
             <StatValue style={{ fontSize: 14 }}>
-              {user?.full_name || "—"}
+              {user?.full_name || "-"}
             </StatValue>
           </View>
           <View style={{ width: "50%", padding: 6 }}>
             <StatLabel style={{ marginBottom: 4 }}>Email</StatLabel>
-            <StatValue style={{ fontSize: 13 }}>{user?.email || "—"}</StatValue>
+            <StatValue style={{ fontSize: 13 }}>{user?.email || "-"}</StatValue>
           </View>
           <View style={{ width: "50%", padding: 6 }}>
             <StatLabel style={{ marginBottom: 4 }}>Member since</StatLabel>
@@ -99,7 +99,7 @@ const SettingsScreen = () => {
         <View style={styles.securityRow}>
           <StatLabel style={{ marginBottom: 0 }}>KYC status</StatLabel>
           <Badge tone={KYC_TONE[user?.kyc_status] || "neutral"}>
-            {user?.kyc_status?.replace("_", " ") || "—"}
+            {user?.kyc_status?.replace("_", " ") || "-"}
           </Badge>
         </View>
         <View style={styles.securityRow}>
@@ -111,7 +111,7 @@ const SettingsScreen = () => {
         <View style={styles.securityRow}>
           <StatLabel style={{ marginBottom: 0 }}>Risk score</StatLabel>
           <StatValue style={{ fontSize: 14 }}>
-            {user?.risk_score ?? "—"}/100
+            {user?.risk_score ?? "-"}/100
           </StatValue>
         </View>
         <Button

@@ -193,7 +193,7 @@ const ComplianceScreen = () => {
               <View style={styles.miniStat}>
                 <StatLabel style={{ marginBottom: 4 }}>Compliance</StatLabel>
                 <Badge tone={COMPLIANCE_TONE[status?.status] || "neutral"}>
-                  {status?.status?.replace("_", " ") || "—"}
+                  {status?.status?.replace("_", " ") || "-"}
                 </Badge>
               </View>
             </View>
@@ -201,7 +201,7 @@ const ComplianceScreen = () => {
               <View style={styles.miniStat}>
                 <StatLabel style={{ marginBottom: 4 }}>KYC Status</StatLabel>
                 <Badge tone={KYC_TONE[kycStatus?.kyc_status] || "neutral"}>
-                  {kycStatus?.kyc_status?.replace("_", " ") || "—"}
+                  {kycStatus?.kyc_status?.replace("_", " ") || "-"}
                 </Badge>
               </View>
             </View>

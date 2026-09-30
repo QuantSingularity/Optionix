@@ -62,7 +62,7 @@ class TestKYCValidation:
 
     def test_high_risk_country_warning(self, svc):
         data = self.VALID_KYC.copy()
-        data["nationality"] = "IR"  # Iran — high-risk
+        data["nationality"] = "IR"  # Iran - high-risk
         result = svc.validate_kyc_data(data)
         # Valid but with warning
         assert len(result["warnings"]) > 0

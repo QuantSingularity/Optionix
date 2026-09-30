@@ -182,7 +182,7 @@ async def portfolio_performance(
         "total_trades": len(trades),
         "total_pnl": str(approx_pnl),
         "total_fees": str(total_fees.quantize(Decimal("0.01"))),
-        "win_rate_pct": "N/A",  # requires mark-to-market — set by real price feed
+        "win_rate_pct": "N/A",  # requires mark-to-market - set by real price feed
         "avg_trade_value": str(avg_value),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

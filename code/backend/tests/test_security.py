@@ -55,7 +55,7 @@ class TestEncryption:
         data = "same plaintext"
         enc1 = security_service.encrypt_sensitive_data(data)
         enc2 = security_service.encrypt_sensitive_data(data)
-        # Fernet uses random IV — should produce different ciphertext
+        # Fernet uses random IV - should produce different ciphertext
         assert enc1.encrypted_data != enc2.encrypted_data
 
     def test_field_encrypt_decrypt(self):

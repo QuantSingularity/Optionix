@@ -411,7 +411,7 @@ async def get_compliance_status(
 
     if current_user.kyc_status != "approved":
         issues.append(
-            f"KYC status is '{current_user.kyc_status}' — trading may be restricted"
+            f"KYC status is '{current_user.kyc_status}' - trading may be restricted"
         )
         recommendations.append(
             "Complete KYC verification via POST /compliance/kyc/submit"

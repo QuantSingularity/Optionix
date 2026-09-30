@@ -41,7 +41,7 @@ class TestRegistration:
         assert "already registered" in r2.json()["message"].lower()
 
     def test_register_weak_password(self, client):
-        # Password too short — rejected by Pydantic schema (422)
+        # Password too short - rejected by Pydantic schema (422)
         resp = _register(client, _unique_email("weak"), password="short")
         assert resp.status_code == 422
 

@@ -24,7 +24,7 @@ run_test() {
   echo -e "${BLUE}Running ${test_name}...${NC}"
 
   # Run in a subshell (the parens) so that any `cd` inside test_command is
-  # local to this invocation and can't leak into the parent script's CWD —
+  # local to this invocation and can't leak into the parent script's CWD -
   # without this, every subsequent test that also does `cd code/backend`
   # (etc.) would compound and fail once CWD has already moved.
   if (eval "$test_command"); then

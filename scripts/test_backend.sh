@@ -38,7 +38,7 @@ BACKEND_PID=$!
 echo -e "${GREEN}Backend started with PID: ${BACKEND_PID}${NC}"
 
 # Make sure the backend is always stopped, even if a test below fails and
-# `set -e` exits the script early — otherwise BACKEND_PID leaks as an
+# `set -e` exits the script early - otherwise BACKEND_PID leaks as an
 # orphaned background process.
 cleanup() {
   if kill -0 "$BACKEND_PID" 2>/dev/null; then

@@ -10,7 +10,7 @@ Usage:
 This creates:
     - volatility_model.pkl   (lightweight sklearn fallback model)
     - feature_scaler.pkl     (StandardScaler fitted on synthetic data)
-    - volatility_model.h5    (Keras model — only if TensorFlow is available)
+    - volatility_model.h5    (Keras model - only if TensorFlow is available)
     - volatility_model_metadata.json
 """
 
@@ -92,7 +92,7 @@ def generate_sklearn_model() -> None:
 
     except ImportError as exc:
         logger.warning(
-            "sklearn/joblib not available — skipping pkl generation: %s", exc
+            "sklearn/joblib not available - skipping pkl generation: %s", exc
         )
 
 
@@ -125,7 +125,7 @@ def generate_keras_model() -> None:
         logger.info("Saved: %s", keras_path)
 
     except ImportError:
-        logger.info("TensorFlow not installed — skipping .h5 generation (optional).")
+        logger.info("TensorFlow not installed - skipping .h5 generation (optional).")
 
 
 def generate_metadata() -> None:
