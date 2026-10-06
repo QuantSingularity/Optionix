@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FiActivity, FiGrid, FiSearch, FiTarget } from "react-icons/fi";
+import { FiActivity, FiCpu, FiGrid, FiSearch, FiTarget } from "react-icons/fi";
 import { useSearchParams } from "react-router-dom";
 import { ThemedLine } from "../components/common/Charts";
 import {
@@ -25,6 +25,7 @@ import {
 } from "../components/common/UI";
 import analyticsService from "../services/analyticsService";
 import { extractErrorMessage } from "../services/apiClient";
+import marketService from "../services/marketService";
 import { formatCurrency } from "../utils/format";
 
 const TABS = [
@@ -32,6 +33,7 @@ const TABS = [
   { key: "iv", label: "Implied Volatility", icon: <FiActivity /> },
   { key: "surface", label: "Vol Surface", icon: <FiGrid /> },
   { key: "quick", label: "Quick Greeks", icon: <FiSearch /> },
+  { key: "forecast", label: "Vol Forecast", icon: <FiCpu /> },
 ];
 
 const ResultGrid = ({ items }) => (
@@ -45,23 +47,44 @@ const ResultGrid = ({ items }) => (
   </Grid>
 );
 
-/* ─── Option Pricer ──────────────────────────────────────────────── */
-const OptionPricer = () => {
+const OptionPricer = ({ initialVolatility }) => {
   const [form, setForm] = useState({
     spotPrice: "190",
     strikePrice: "195",
     timeToExpiry: "0.25",
     volatility: "0.28",
     riskFreeRate: "0.05",
+    dividendYield: "0",
     optionType: "call",
+    optionStyle: "european",
     pricingMethod: "black_scholes",
+    barrierLevel: "",
+    barrierType: "up_and_out",
   });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (initialVolatility) {
+      setForm((f) => ({ ...f, volatility: String(initialVolatility) }));
+    }
+  }, [initialVolatility]);
+
   const update = (field) => (e) =>
     setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  const updateStyle = (e) => {
+    const optionStyle = e.target.value;
+    setForm((f) => {
+      let pricingMethod = f.pricingMethod;
+      if (optionStyle === "american") pricingMethod = "black_scholes";
+      if (optionStyle !== "european" && pricingMethod === "heston") {
+        pricingMethod = "black_scholes";
+      }
+      return { ...f, optionStyle, pricingMethod };
+    });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -74,8 +97,16 @@ const OptionPricer = () => {
         timeToExpiry: Number(form.timeToExpiry),
         volatility: Number(form.volatility),
         riskFreeRate: Number(form.riskFreeRate),
+        dividendYield: Number(form.dividendYield || 0),
         optionType: form.optionType,
+        optionStyle: form.optionStyle,
         pricingMethod: form.pricingMethod,
+        barrierLevel:
+          form.optionStyle === "barrier"
+            ? Number(form.barrierLevel)
+            : undefined,
+        barrierType:
+          form.optionStyle === "barrier" ? form.barrierType : undefined,
       });
       setResult(data);
     } catch (err) {
@@ -151,14 +182,72 @@ const OptionPricer = () => {
               </Select>
             </Field>
           </Grid>
+          <Grid $cols={2} $gap="12px">
+            <Field>
+              <Label>Dividend yield</Label>
+              <Input
+                type="number"
+                step="0.001"
+                min="0"
+                value={form.dividendYield}
+                onChange={update("dividendYield")}
+              />
+            </Field>
+            <Field>
+              <Label>Exercise style</Label>
+              <Select value={form.optionStyle} onChange={updateStyle}>
+                <option value="european">European</option>
+                <option value="american">American</option>
+                <option value="barrier">Barrier</option>
+              </Select>
+            </Field>
+          </Grid>
+          {form.optionStyle === "barrier" && (
+            <Grid $cols={2} $gap="12px">
+              <Field>
+                <Label>Barrier level</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={form.barrierLevel}
+                  onChange={update("barrierLevel")}
+                />
+              </Field>
+              <Field>
+                <Label>Barrier type</Label>
+                <Select
+                  value={form.barrierType}
+                  onChange={update("barrierType")}
+                >
+                  <option value="up_and_out">Up and out</option>
+                  <option value="up_and_in">Up and in</option>
+                  <option value="down_and_out">Down and out</option>
+                  <option value="down_and_in">Down and in</option>
+                </Select>
+              </Field>
+            </Grid>
+          )}
           <Field>
             <Label>Pricing method</Label>
             <Select
               value={form.pricingMethod}
               onChange={update("pricingMethod")}
             >
-              <option value="black_scholes">Black-Scholes (analytic)</option>
-              <option value="monte_carlo">Monte Carlo</option>
+              <option value="black_scholes">
+                {form.optionStyle === "american"
+                  ? "Binomial lattice"
+                  : "Analytic (Black-Scholes)"}
+              </option>
+              <option
+                value="monte_carlo"
+                disabled={form.optionStyle === "american"}
+              >
+                Monte Carlo
+              </option>
+              <option value="heston" disabled={form.optionStyle !== "european"}>
+                Heston stochastic volatility
+              </option>
             </Select>
           </Field>
           <Button type="submit" disabled={loading} style={{ width: "100%" }}>
@@ -180,6 +269,16 @@ const OptionPricer = () => {
               ["Theta (Θ)", result.theta.toFixed(4)],
               ["Vega (ν)", result.vega.toFixed(4)],
               ["Rho (ρ)", result.rho != null ? result.rho.toFixed(4) : "-"],
+              ["Method", result.method],
+              ...(result.std_error != null
+                ? [
+                    ["Std error", result.std_error.toFixed(4)],
+                    [
+                      "95% interval",
+                      `${result.confidence_interval[0].toFixed(3)} to ${result.confidence_interval[1].toFixed(3)}`,
+                    ],
+                  ]
+                : []),
             ]}
           />
         ) : (
@@ -190,14 +289,15 @@ const OptionPricer = () => {
   );
 };
 
-/* ─── Implied Volatility ─────────────────────────────────────────── */
 const ImpliedVolatility = () => {
   const [form, setForm] = useState({
     marketPrice: "12.50",
     spotPrice: "190",
     strikePrice: "195",
     timeToExpiry: "0.25",
+    dividendYield: "0",
     optionType: "call",
+    optionStyle: "european",
   });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
@@ -216,7 +316,9 @@ const ImpliedVolatility = () => {
         spotPrice: Number(form.spotPrice),
         strikePrice: Number(form.strikePrice),
         timeToExpiry: Number(form.timeToExpiry),
+        dividendYield: Number(form.dividendYield || 0),
         optionType: form.optionType,
+        optionStyle: form.optionStyle,
       });
       setResult(data);
     } catch (err) {
@@ -281,6 +383,25 @@ const ImpliedVolatility = () => {
               </Select>
             </Field>
           </Grid>
+          <Grid $cols={2} $gap="12px">
+            <Field>
+              <Label>Dividend yield</Label>
+              <Input
+                type="number"
+                step="0.001"
+                min="0"
+                value={form.dividendYield}
+                onChange={update("dividendYield")}
+              />
+            </Field>
+            <Field>
+              <Label>Exercise style</Label>
+              <Select value={form.optionStyle} onChange={update("optionStyle")}>
+                <option value="european">European</option>
+                <option value="american">American</option>
+              </Select>
+            </Field>
+          </Grid>
           <Button type="submit" disabled={loading} style={{ width: "100%" }}>
             {loading ? "Solving…" : "Solve for IV"}
           </Button>
@@ -300,6 +421,7 @@ const ImpliedVolatility = () => {
               ],
               ["Raw σ", result.implied_volatility.toFixed(6)],
               ["Option type", result.option_type],
+              ["Exercise style", result.option_style],
             ]}
           />
         ) : (
@@ -310,7 +432,6 @@ const ImpliedVolatility = () => {
   );
 };
 
-/* ─── Volatility Surface ─────────────────────────────────────────── */
 const VolatilitySurface = () => {
   const [form, setForm] = useState({
     spotPrice: "190",
@@ -431,7 +552,6 @@ const VolatilitySurface = () => {
   );
 };
 
-/* ─── Quick Greeks ───────────────────────────────────────────────── */
 const QuickGreeks = ({ initialSymbol }) => {
   const [form, setForm] = useState({
     symbol: initialSymbol || "AAPL",
@@ -439,6 +559,7 @@ const QuickGreeks = ({ initialSymbol }) => {
     strike: "195",
     expiryDays: "30",
     volatility: "0.28",
+    optionType: "call",
   });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
@@ -463,6 +584,7 @@ const QuickGreeks = ({ initialSymbol }) => {
         strike: Number(form.strike),
         expiryDays: Number(form.expiryDays),
         volatility: Number(form.volatility),
+        optionType: form.optionType,
       });
       setResult(data);
     } catch (err) {
@@ -527,6 +649,13 @@ const QuickGreeks = ({ initialSymbol }) => {
               />
             </Field>
           </Grid>
+          <Field>
+            <Label>Option type</Label>
+            <Select value={form.optionType} onChange={update("optionType")}>
+              <option value="call">Call</option>
+              <option value="put">Put</option>
+            </Select>
+          </Field>
           <Button type="submit" disabled={loading} style={{ width: "100%" }}>
             {loading ? "Fetching…" : "Get Greeks"}
           </Button>
@@ -552,11 +681,178 @@ const QuickGreeks = ({ initialSymbol }) => {
   );
 };
 
-/* ─── Page ────────────────────────────────────────────────────────── */
+const TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"];
+
+const VolatilityForecast = ({ onUseVolatility }) => {
+  const [form, setForm] = useState({
+    symbol: "AAPL",
+    open: "190",
+    high: "194",
+    low: "188",
+    close: "192",
+    volume: "1000000",
+    timeframe: "1d",
+  });
+  const [result, setResult] = useState(null);
+  const [info, setInfo] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    marketService
+      .getModelInfo()
+      .then((data) => active && setInfo(data))
+      .catch(() => active && setInfo(null));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const update = (field) => (e) =>
+    setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const data = await marketService.predictVolatility({
+        symbol: form.symbol.trim().toUpperCase(),
+        open: Number(form.open),
+        high: Number(form.high),
+        low: Number(form.low),
+        close: Number(form.close),
+        volume: Number(form.volume),
+        timeframe: form.timeframe,
+      });
+      setResult(data);
+    } catch (err) {
+      setError(extractErrorMessage(err, "Forecast failed."));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const annualised = result ? Number(result.volatility) : null;
+  const usingFallback = result
+    ? result.model_version === "fallback_statistical"
+    : info?.fallback_active;
+
+  return (
+    <Grid $cols={3} $gap="18px">
+      <Card>
+        <CardHeader>
+          <CardTitle>Latest Bar</CardTitle>
+        </CardHeader>
+        {error && <Alert $tone="danger">{error}</Alert>}
+        <form onSubmit={handleSubmit}>
+          <Grid $cols={2} $gap="12px">
+            <Field>
+              <Label>Symbol</Label>
+              <Input
+                value={form.symbol}
+                maxLength={10}
+                onChange={update("symbol")}
+              />
+            </Field>
+            <Field>
+              <Label>Timeframe</Label>
+              <Select value={form.timeframe} onChange={update("timeframe")}>
+                {TIMEFRAMES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </Grid>
+          <Grid $cols={2} $gap="12px">
+            {["open", "high", "low", "close"].map((field) => (
+              <Field key={field}>
+                <Label>{field[0].toUpperCase() + field.slice(1)}</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                  value={form[field]}
+                  onChange={update(field)}
+                />
+              </Field>
+            ))}
+          </Grid>
+          <Field>
+            <Label>Volume</Label>
+            <Input
+              type="number"
+              min="0"
+              required
+              value={form.volume}
+              onChange={update("volume")}
+            />
+          </Field>
+          <Button type="submit" disabled={loading} style={{ width: "100%" }}>
+            {loading ? "Forecasting…" : "Forecast Volatility"}
+          </Button>
+        </form>
+      </Card>
+
+      <Card style={{ gridColumn: "span 2" }}>
+        <CardHeader>
+          <CardTitle>Model Forecast</CardTitle>
+        </CardHeader>
+        {result ? (
+          <>
+            <ResultGrid
+              items={[
+                ["Annualised volatility", `${(annualised * 100).toFixed(2)}%`],
+                [
+                  "Confidence",
+                  result.confidence != null
+                    ? `${(Number(result.confidence) * 100).toFixed(1)}%`
+                    : "n/a",
+                ],
+                ["Horizon", result.prediction_horizon],
+                ["Model version", result.model_version],
+                ["Symbol", result.symbol],
+              ]}
+            />
+            <div style={{ marginTop: 16 }}>
+              <Button
+                type="button"
+                onClick={() => onUseVolatility(annualised.toFixed(4))}
+              >
+                Price an option with this volatility
+              </Button>
+            </div>
+          </>
+        ) : (
+          <HelpText>
+            Enter the most recent OHLC bar to forecast forward volatility.
+          </HelpText>
+        )}
+        {usingFallback && (
+          <Alert $tone="warning" style={{ marginTop: 16 }}>
+            The trained model is not loaded. Forecasts use a statistical range
+            estimator until model artifacts are generated.
+          </Alert>
+        )}
+      </Card>
+    </Grid>
+  );
+};
+
 const Analytics = () => {
   const [searchParams] = useSearchParams();
   const symbolParam = searchParams.get("symbol");
   const [tab, setTab] = useState(symbolParam ? "quick" : "price");
+  const [forecastVolatility, setForecastVolatility] = useState(null);
+
+  const applyForecast = (value) => {
+    setForecastVolatility(value);
+    setTab("price");
+  };
 
   return (
     <PageWrap>
@@ -564,8 +860,8 @@ const Analytics = () => {
         <div>
           <PageTitle>Analytics</PageTitle>
           <PageSubtitle>
-            Price options, solve implied volatility, and explore the vol
-            surface.
+            Price options, solve implied volatility, explore the vol surface,
+            and forecast volatility with the AI model.
           </PageSubtitle>
         </div>
       </PageHeader>
@@ -583,10 +879,15 @@ const Analytics = () => {
         ))}
       </Segmented>
 
-      {tab === "price" && <OptionPricer />}
+      {tab === "price" && (
+        <OptionPricer initialVolatility={forecastVolatility} />
+      )}
       {tab === "iv" && <ImpliedVolatility />}
       {tab === "surface" && <VolatilitySurface />}
       {tab === "quick" && <QuickGreeks initialSymbol={symbolParam} />}
+      {tab === "forecast" && (
+        <VolatilityForecast onUseVolatility={applyForecast} />
+      )}
     </PageWrap>
   );
 };

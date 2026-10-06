@@ -23,6 +23,8 @@ const marketService = {
         limit,
       })
       .then((r) => r.data),
+
+  getModelInfo: () => apiClient.get("/market/model-info").then((r) => r.data),
 };
 
 export default marketService;

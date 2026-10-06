@@ -1,22 +1,19 @@
-"""
-Portfolio routes for Optionix platform.
-Portfolio analytics, performance metrics, and allocation reporting.
-"""
-
 import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict
 
-import numpy as np
 from fastapi import APIRouter, Depends, Query
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_active_user
 from ..database import get_db
 from ..models import Account, Position, Trade, User
 from ..services.financial_service import FinancialCalculationService
+from ..services.pricing_engine import PricingEngine
 from ..services.risk_assessment import RiskCalculator
+from .analytics import get_pricing_engine
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/portfolio", tags=["Portfolio"])
@@ -26,10 +23,6 @@ _risk_calc = RiskCalculator()
 
 
 def _user_positions_query(user: User, db: Session):
-    """
-    Positions belong to an Account, not directly to a User, so we join
-    through Account to scope the query to the authenticated user.
-    """
     return (
         db.query(Position)
         .join(Account, Position.account_id == Account.id)
@@ -42,12 +35,6 @@ async def portfolio_overview(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """
-    High-level portfolio overview across all trading accounts.
-
-    Returns total equity, open P&L, margin utilisation, and a
-    position count breakdown by asset class.
-    """
     accounts = (
         db.query(Account)
         .filter(Account.user_id == current_user.id, Account.account_status == "active")
@@ -99,9 +86,6 @@ async def portfolio_allocation(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """
-    Break down open positions by symbol and compute weight in portfolio.
-    """
     positions = (
         _user_positions_query(current_user, db).filter(Position.status == "open").all()
     )
@@ -144,11 +128,6 @@ async def portfolio_performance(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """
-    Compute realised P&L and trade statistics over a rolling window.
-
-    Returns total P&L, win rate, average trade size, and Sharpe-like ratio.
-    """
     from datetime import timedelta
 
     cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
@@ -173,7 +152,6 @@ async def portfolio_performance(
 
     total_value = sum(t.total_value for t in trades)
     total_fees = sum(t.fees for t in trades)
-    # Approximate PnL as net of fees (simplified without mark-to-market)
     approx_pnl = (-total_fees).quantize(Decimal("0.01"))
     avg_value = (total_value / len(trades)).quantize(Decimal("0.01"))
 
@@ -182,7 +160,7 @@ async def portfolio_performance(
         "total_trades": len(trades),
         "total_pnl": str(approx_pnl),
         "total_fees": str(total_fees.quantize(Decimal("0.01"))),
-        "win_rate_pct": "N/A",  # requires mark-to-market - set by real price feed
+        "win_rate_pct": "N/A",
         "avg_trade_value": str(avg_value),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -190,37 +168,35 @@ async def portfolio_performance(
 
 @router.get("/risk-metrics")
 async def portfolio_risk_metrics(
+    annual_volatility: float = Query(0.3175, gt=0.01, le=5.0),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
+    engine: PricingEngine = Depends(get_pricing_engine),
 ) -> Dict[str, Any]:
-    """
-    Aggregate risk metrics: VaR, Expected Shortfall, margin-at-risk.
-
-    Uses Monte Carlo-sampled returns when real price history is unavailable.
-    """
     positions = (
         _user_positions_query(current_user, db).filter(Position.status == "open").all()
     )
     if not positions:
         return {"var_95": "0.00", "cvar_95": "0.00", "positions": 0}
 
-    # Synthesise returns from position P&L
-    rng = np.random.default_rng(42)
     n_sim = 10_000
     portfolio_value = float(
         sum((p.size * (p.current_price or p.entry_price)) for p in positions)
     )
-    simulated_returns = rng.normal(0.0, 0.02, n_sim) * portfolio_value
-
-    var_95 = _risk_calc.calculate_var(simulated_returns, confidence=0.95)
-    cvar_95 = _risk_calc.expected_shortfall(simulated_returns, confidence=0.95)
+    returns = await run_in_threadpool(
+        engine.simulate_returns, annual_volatility, 1, n_sim
+    )
+    pnl = returns * portfolio_value
+    var_95 = _risk_calc.calculate_var(pnl, confidence=0.95)
+    cvar_95 = _risk_calc.expected_shortfall(pnl, confidence=0.95)
 
     return {
         "positions": len(positions),
         "portfolio_value": f"{portfolio_value:.2f}",
         "var_95": f"{var_95:.2f}",
         "cvar_95": f"{cvar_95:.2f}",
-        "methodology": "Monte Carlo (10,000 paths)",
+        "annual_volatility": f"{annual_volatility:.4f}",
+        "methodology": f"Monte Carlo GBM ({n_sim:,} paths, 1 day)",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -230,9 +206,6 @@ async def greeks_summary(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """
-    Aggregate net Greeks (Delta, Gamma, Theta, Vega, Rho) across all open positions.
-    """
     positions = (
         _user_positions_query(current_user, db).filter(Position.status == "open").all()
     )

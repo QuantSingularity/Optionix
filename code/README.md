@@ -28,24 +28,40 @@ AI models feed volatility predictions and pricing data into the backend API. The
 ```
 code/
 ├── ai_models/
+│   ├── artifacts/                        # Generated model files (git ignored)
 │   ├── quantitative/
 │   │   ├── __init__.py
-│   │   ├── black_scholes.py              # Black-Scholes options pricing
+│   │   ├── black_scholes.py              # European, American and barrier pricing, Greeks, implied volatility
 │   │   ├── monte_carlo.py                # Monte Carlo simulation engine
 │   │   └── advanced/
 │   │       ├── __init__.py
-│   │       ├── calibration_engine.py     # Model calibration engine
-│   │       ├── local_volatility.py       # Local volatility surface models
-│   │       ├── stochastic_volatility.py  # Stochastic volatility models
-│   │       └── volatility_surface.py     # Volatility surface construction
-│   ├── training_scripts/
-│   │   ├── __init__.py
-│   │   ├── data_preprocessing.py         # Data cleaning and feature engineering
-│   │   └── train_volatility_model.py     # Volatility model training pipeline
+│   │       ├── calibration_engine.py     # Calibrates every model from option quotes
+│   │       ├── local_volatility.py       # Dupire local volatility and CEV
+│   │       ├── stochastic_volatility.py  # Heston and SABR
+│   │       └── volatility_surface.py     # SVI, SABR, spline surfaces and arbitrage checks
+│   ├── volatility/
+│   │   ├── features.py                   # Feature contract and bar validation
+│   │   ├── dataset.py                    # Look-ahead free training set construction
+│   │   ├── training.py                   # Pipeline training and validation
+│   │   ├── artifacts.py                  # Artifact persistence with integrity hashes
+│   │   └── inference.py                  # Predictor used by the API
+│   ├── models/
+│   │   ├── schemas.py                    # Enums and dataclasses
+│   │   ├── volatility_model.py           # History based volatility forecaster
+│   │   ├── fraud_model.py                # Supervised fraud classifier
+│   │   └── service.py                    # Model registry
+│   ├── training/
+│   │   ├── synthetic.py                  # Heston generated OHLC bars
+│   │   ├── generate_artifacts.py         # Builds the default artifact set
+│   │   ├── train_volatility_model.py     # Trains from a CSV of real bars
+│   │   └── data_preprocessing.py         # CSV loading and sequence helpers
+│   ├── tests/                            # Mirrors the package layout
 │   ├── __init__.py
-│   ├── create_model.py                   # Model creation orchestrator
-│   ├── generate_model_artifacts.py       # Artifact generation and export
-│   └── volatility_model_metadata.json    # Model metadata and versioning
+│   ├── config.py
+│   ├── pyproject.toml
+│   ├── requirements.txt
+│   ├── Makefile
+│   └── README.md
 ├── backend/
 │   ├── app/
 │   │   ├── api/
@@ -116,34 +132,30 @@ The `ai_models/` module provides machine learning and quantitative finance capab
 
 ### Quantitative Models (`ai_models/quantitative/`)
 
-| File               | Description                                                                   |
-| ------------------ | ----------------------------------------------------------------------------- |
-| `black_scholes.py` | Black-Scholes closed-form pricing and Greeks (Delta, Gamma, Theta, Vega, Rho) |
-| `monte_carlo.py`   | Monte Carlo simulation engine supporting American and exotic options          |
+| File               | Description                                                                                              |
+| ------------------ | -------------------------------------------------------------------------------------------------------- |
+| `black_scholes.py` | Closed-form European pricing and Greeks, CRR American lattice, analytic barrier pricing                  |
+| `monte_carlo.py`   | GBM, jump diffusion, Heston and mean reverting paths with antithetic, control variate and Sobol sampling |
 
 ### Advanced Models (`ai_models/quantitative/advanced/`)
 
-| File                       | Description                                          |
-| -------------------------- | ---------------------------------------------------- |
-| `calibration_engine.py`    | Fits model parameters to market-observed prices      |
-| `local_volatility.py`      | Local volatility surface models via Dupire's formula |
-| `stochastic_volatility.py` | Heston and SABR stochastic volatility models         |
-| `volatility_surface.py`    | Volatility surface construction and interpolation    |
+| File                       | Description                                                              |
+| -------------------------- | ------------------------------------------------------------------------ |
+| `calibration_engine.py`    | Fits Heston, SABR, CEV and local volatility models to option quotes      |
+| `local_volatility.py`      | Dupire local volatility from a fitted surface, and exact CEV pricing     |
+| `stochastic_volatility.py` | Heston (characteristic function) and SABR (Hagan) models                 |
+| `volatility_surface.py`    | SVI, SABR, spline and linear surfaces with calendar and butterfly checks |
 
-### Training Scripts (`ai_models/training_scripts/`)
+### Volatility Forecasting (`ai_models/volatility/`, `ai_models/training/`)
 
-| File                        | Description                                                           |
-| --------------------------- | --------------------------------------------------------------------- |
-| `data_preprocessing.py`     | Data cleaning, feature engineering, and normalization for market data |
-| `train_volatility_model.py` | End-to-end scikit-learn training pipeline for volatility prediction   |
+| Path                                 | Description                                                           |
+| ------------------------------------ | --------------------------------------------------------------------- |
+| `volatility/features.py`             | Scale free feature contract shared by training and the API            |
+| `volatility/inference.py`            | Thread safe predictor with integrity check and statistical fallback   |
+| `training/generate_artifacts.py`     | `python -m ai_models.training.generate_artifacts`                     |
+| `training/train_volatility_model.py` | `python -m ai_models.training.train_volatility_model --data bars.csv` |
 
-### Model Artifacts
-
-| File                             | Description                                                              |
-| -------------------------------- | ------------------------------------------------------------------------ |
-| `create_model.py`                | Orchestrates model creation combining quantitative and ML approaches     |
-| `generate_model_artifacts.py`    | Exports trained models and generates reproducible model packages         |
-| `volatility_model_metadata.json` | Version tracking, hyperparameters, training metrics, and feature schemas |
+Generated files land in `ai_models/artifacts/`. See `ai_models/README.md` for details.
 
 ## Backend
 
@@ -292,7 +304,8 @@ pip install -r requirements.txt
 
 # AI Models setup (shares backend requirements)
 cd code/ai_models
-pip install -r ../backend/requirements.txt
+pip install -r requirements-dev.txt
+make artifacts
 
 # Blockchain setup
 cd code/blockchain
@@ -325,7 +338,7 @@ truffle test
 
 # AI models
 cd code/ai_models
-python -m unittest discover
+make test
 ```
 
 ### Docker Deployment

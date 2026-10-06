@@ -1,8 +1,3 @@
-"""
-Main FastAPI application for Optionix platform.
-Integrates comprehensive security, compliance, and financial standards.
-"""
-
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -25,7 +20,7 @@ from .middleware.security import (
 )
 from .schemas import HealthCheckResponse
 from .services.blockchain_service import BlockchainService
-from .services.model_service import ModelService
+from .services.model_service import get_model_service
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper()),
@@ -33,14 +28,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Module-level service instances (shared across requests)
 blockchain_service = BlockchainService()
-model_service = ModelService()
+model_service = get_model_service()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan manager"""
     logger.info("Starting Optionix API...")
     try:
         create_tables()
@@ -65,21 +58,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── Middleware (order matters: last added = outermost) ──────────────────────
-# TrustedHostMiddleware must not run during testing - TestClient sends host
-# "testserver" which would be rejected with 400 Invalid host header.
-# Only enforce in staging/production where real hostnames are known.
 if settings.environment in ("staging", "production"):
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(AdvancedRateLimitMiddleware)
 app.add_middleware(RequestValidationMiddleware)
 app.add_middleware(AuditLoggingMiddleware)
-# CORSMiddleware must be added LAST so it is the outermost layer and still
-# attaches Access-Control-Allow-* headers to responses that other
-# middleware (rate limiting, request validation) short-circuit early -
-# otherwise the browser drops those responses as CORS failures and the
-# frontend sees a generic "Network Error" instead of the real 4xx detail.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -88,16 +72,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Routers ─────────────────────────────────────────────────────────────────
 app.include_router(api_router)
 
-# Prometheus metrics endpoint (served on the same port as the rest of the
-# API - the Kubernetes Deployment's prometheus.io/port annotation already
-# points at 8000, not a separate metrics port).
 app.mount("/metrics", make_asgi_app())
 
 
-# ── Exception handlers ──────────────────────────────────────────────────────
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     if exc.status_code in [401, 403, 429]:
@@ -124,7 +103,6 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     )
 
 
-# ── System endpoints ─────────────────────────────────────────────────────────
 @app.get("/", tags=["System"])
 async def root():
     return {
@@ -136,7 +114,6 @@ async def root():
 
 @app.get("/health", response_model=HealthCheckResponse, tags=["System"])
 async def health_check():
-    """System health check with security and compliance status"""
     services_status = {
         "database": "healthy",
         "blockchain": "healthy" if blockchain_service.is_connected() else "unhealthy",

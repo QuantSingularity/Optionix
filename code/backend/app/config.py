@@ -1,8 +1,3 @@
-"""
-Configuration management for Optionix platform.
-Includes security, compliance, and financial standards settings.
-"""
-
 from decimal import Decimal
 from typing import Any, List, Optional
 
@@ -11,7 +6,6 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    """Application settings with comprehensive configuration"""
 
     app_name: str = "Optionix Trading Platform"
     app_version: str = "2.0.0"
@@ -93,9 +87,10 @@ class Settings(BaseSettings):
     basel_iii_monitoring_enabled: bool = True
     dodd_frank_compliance_enabled: bool = True
 
-    model_path: str = "../ai_models/volatility_model.pkl"
-    scaler_path: str = "../ai_models/feature_scaler.pkl"
-    model_version: str = "1.0.0"
+    ai_models_dir: Optional[str] = None
+    model_path: Optional[str] = None
+    model_version: str = "2.1.0"
+    model_auto_generate: bool = False
 
     default_leverage_limit: Decimal = Decimal("10.0")
     max_leverage_limit: Decimal = Decimal("100.0")
@@ -206,5 +201,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
-# (patched below by sed)

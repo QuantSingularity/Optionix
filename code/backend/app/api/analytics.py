@@ -1,14 +1,11 @@
-"""
-Analytics routes for Optionix platform.
-Options pricing, Greeks calculation, volatility surface, and implied volatility.
-"""
-
 import logging
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from fastapi.concurrency import run_in_threadpool
+from pydantic import BaseModel, Field, model_validator
 
 from ..auth import get_current_active_user
 from ..models import User
@@ -17,30 +14,55 @@ from ..services.pricing_engine import PricingEngine
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
-_pricing = PricingEngine()
+
+@lru_cache(maxsize=1)
+def get_pricing_engine() -> PricingEngine:
+    return PricingEngine()
 
 
-# ── Request / Response schemas ─────────────────────────────────────────────
+class HestonParams(BaseModel):
+    v0: float = Field(0.04, gt=0, le=2.0)
+    kappa: float = Field(2.0, gt=0, le=50.0)
+    theta: float = Field(0.04, gt=0, le=2.0)
+    sigma: float = Field(0.3, gt=0, le=5.0)
+    rho: float = Field(-0.7, gt=-1.0, lt=1.0)
 
 
 class OptionPricingRequest(BaseModel):
-    spot_price: float = Field(..., gt=0, description="Current underlying price")
-    strike_price: float = Field(..., gt=0, description="Option strike price")
-    time_to_expiry: float = Field(
-        ..., gt=0, le=5.0, description="Time to expiry in years"
-    )
-    risk_free_rate: float = Field(
-        0.05, ge=0, le=1.0, description="Annual risk-free rate"
-    )
-    volatility: float = Field(
-        ..., gt=0, le=5.0, description="Annualised implied volatility"
-    )
+    spot_price: float = Field(..., gt=0)
+    strike_price: float = Field(..., gt=0)
+    time_to_expiry: float = Field(..., gt=0, le=5.0)
+    risk_free_rate: float = Field(0.05, ge=0, le=1.0)
+    volatility: float = Field(..., gt=0, le=5.0)
     option_type: str = Field("call", pattern=r"^(call|put)$")
     dividend_yield: float = Field(0.0, ge=0, le=1.0)
+    option_style: str = Field("european", pattern=r"^(european|american|barrier)$")
     pricing_method: str = Field(
-        "black_scholes", pattern=r"^(black_scholes|monte_carlo)$"
+        "black_scholes", pattern=r"^(black_scholes|monte_carlo|heston)$"
     )
     monte_carlo_paths: int = Field(100_000, ge=1_000, le=1_000_000)
+    barrier_level: Optional[float] = Field(None, gt=0)
+    barrier_type: Optional[str] = Field(
+        None, pattern=r"^(up_and_out|up_and_in|down_and_out|down_and_in)$"
+    )
+    heston: Optional[HestonParams] = None
+
+    @model_validator(mode="after")
+    def _check_combination(self) -> "OptionPricingRequest":
+        if self.option_style == "barrier":
+            if self.barrier_level is None or self.barrier_type is None:
+                raise ValueError(
+                    "barrier_level and barrier_type are required for barrier options"
+                )
+            if self.pricing_method == "heston":
+                raise ValueError("Heston pricing supports european options only")
+        if self.option_style == "american" and self.pricing_method != "black_scholes":
+            raise ValueError(
+                "american options use the binomial lattice; keep pricing_method black_scholes"
+            )
+        if self.pricing_method == "heston" and self.option_style != "european":
+            raise ValueError("Heston pricing supports european options only")
+        return self
 
 
 class OptionPricingResponse(BaseModel):
@@ -51,169 +73,157 @@ class OptionPricingResponse(BaseModel):
     vega: float
     rho: Optional[float] = None
     method: str
+    option_style: str = "european"
+    std_error: Optional[float] = None
+    confidence_interval: Optional[List[float]] = None
     timestamp: str
+
+
+class SurfaceQuote(BaseModel):
+    strike: float = Field(..., gt=0)
+    expiry: float = Field(..., gt=0, le=10.0)
+    implied_volatility: float = Field(..., gt=0, le=5.0)
+    option_type: str = Field("call", pattern=r"^(call|put)$")
 
 
 class VolatilitySurfaceRequest(BaseModel):
     spot_price: float = Field(..., gt=0)
     strikes: List[float] = Field(..., min_length=2, max_length=50)
-    expiries: List[float] = Field(..., min_length=1, max_length=12, description="Years")
+    expiries: List[float] = Field(..., min_length=1, max_length=12)
     risk_free_rate: float = Field(0.05, ge=0, le=1.0)
+    dividend_yield: float = Field(0.0, ge=0, le=1.0)
     base_volatility: float = Field(0.20, gt=0, le=2.0)
+    quotes: Optional[List[SurfaceQuote]] = Field(None, min_length=3, max_length=500)
+    method: str = Field("svi", pattern=r"^(spline|linear|svi|sabr)$")
+
+    @model_validator(mode="after")
+    def _positive_grid(self) -> "VolatilitySurfaceRequest":
+        if any(k <= 0 for k in self.strikes) or any(
+            t <= 0 or t > 10 for t in self.expiries
+        ):
+            raise ValueError(
+                "strikes must be positive and expiries within (0, 10] years"
+            )
+        return self
 
 
 class ImpliedVolRequest(BaseModel):
     market_price: float = Field(..., gt=0)
     spot_price: float = Field(..., gt=0)
     strike_price: float = Field(..., gt=0)
-    time_to_expiry: float = Field(..., gt=0)
+    time_to_expiry: float = Field(..., gt=0, le=30.0)
     risk_free_rate: float = Field(0.05, ge=0, le=1.0)
+    dividend_yield: float = Field(0.0, ge=0, le=1.0)
+    option_type: str = Field("call", pattern=r"^(call|put)$")
+    option_style: str = Field("european", pattern=r"^(european|american)$")
+
+
+class CalibrationQuote(BaseModel):
+    strike: float = Field(..., gt=0)
+    expiry: float = Field(..., gt=0, le=10.0)
+    price: Optional[float] = Field(None, gt=0)
+    iv: Optional[float] = Field(None, gt=0, le=5.0)
     option_type: str = Field("call", pattern=r"^(call|put)$")
 
-
-# ── Helpers ────────────────────────────────────────────────────────────────
-
-
-def _bs_put_price(S: float, K: float, T: float, r: float, sigma: float) -> float:
-    """European put price via Black-Scholes."""
-    import math
-
-    import scipy.stats as stats  # type: ignore
-
-    d1 = (math.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * math.sqrt(T))
-    d2 = d1 - sigma * math.sqrt(T)
-    return float(K * math.exp(-r * T) * stats.norm.cdf(-d2) - S * stats.norm.cdf(-d1))
+    @model_validator(mode="after")
+    def _needs_price_or_iv(self) -> "CalibrationQuote":
+        if self.price is None and self.iv is None:
+            raise ValueError("each quote needs a price or an iv")
+        return self
 
 
-def _bs_call_price(S: float, K: float, T: float, r: float, sigma: float) -> float:
-    """European call price via Black-Scholes."""
-    import math
-
-    import scipy.stats as stats  # type: ignore
-
-    d1 = (math.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * math.sqrt(T))
-    d2 = d1 - sigma * math.sqrt(T)
-    return float(S * stats.norm.cdf(d1) - K * math.exp(-r * T) * stats.norm.cdf(d2))
+class CalibrationRequest(BaseModel):
+    model: str = Field(..., pattern=r"^(heston|sabr|cev)$")
+    spot_price: float = Field(..., gt=0)
+    risk_free_rate: float = Field(0.02, ge=0, le=1.0)
+    dividend_yield: float = Field(0.0, ge=0, le=1.0)
+    options: List[CalibrationQuote] = Field(..., min_length=3, max_length=200)
 
 
-def _implied_vol_bisection(
-    market_price: float,
-    S: float,
-    K: float,
-    T: float,
-    r: float,
-    option_type: str,
-    tol: float = 1e-6,
-    max_iter: int = 200,
-) -> Optional[float]:
-    """Solve for implied volatility via bisection."""
-    pricer = _bs_call_price if option_type == "call" else _bs_put_price
-    lo, hi = 1e-6, 10.0
-    for _ in range(max_iter):
-        mid = (lo + hi) / 2.0
-        price_mid = pricer(S, K, T, r, mid)
-        if abs(price_mid - market_price) < tol:
-            return mid
-        if price_mid < market_price:
-            lo = mid
-        else:
-            hi = mid
-    return (lo + hi) / 2.0
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
-# ── Endpoints ──────────────────────────────────────────────────────────────
+def _fail(exc: Exception, context: str) -> HTTPException:
+    if isinstance(exc, ValueError):
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        )
+    logger.exception("%s failed", context)
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{context} failed"
+    )
 
 
 @router.post("/price", response_model=OptionPricingResponse)
 async def price_option(
     req: OptionPricingRequest,
     current_user: User = Depends(get_current_active_user),
+    engine: PricingEngine = Depends(get_pricing_engine),
 ):
-    """
-    Price a European option and compute its Greeks.
-
-    Supports Black-Scholes (analytic) and Monte Carlo (stochastic) methods.
-    """
     try:
-        S, K, T, r, sigma = (
+        result = await run_in_threadpool(
+            engine.price,
             req.spot_price,
             req.strike_price,
             req.time_to_expiry,
             req.risk_free_rate,
             req.volatility,
-        )
-
-        greeks = _pricing.calculate_greeks(S, K, T, r, sigma)
-
-        if req.pricing_method == "monte_carlo":
-            price = _pricing.monte_carlo_pricing(
-                S, K, T, r, sigma, iterations=req.monte_carlo_paths, seed=42
-            )
-            if req.option_type == "put":
-                # Put via put-call parity
-                import math
-
-                call_price = _bs_call_price(S, K, T, r, sigma)
-                price = call_price - S + K * math.exp(-r * T)
-        else:
-            if req.option_type == "call":
-                price = _bs_call_price(S, K, T, r, sigma)
-            else:
-                price = _bs_put_price(S, K, T, r, sigma)
-
-        # For puts, flip delta sign
-        delta = greeks["delta"] if req.option_type == "call" else greeks["delta"] - 1.0
-
-        import math
-
-        rho = K * T * math.exp(-r * T) * 0.01  # simplified rho approximation
-
-        return OptionPricingResponse(
-            price=round(price, 6),
-            delta=round(delta, 6),
-            gamma=round(greeks["gamma"], 6),
-            theta=round(-greeks["vega"] * 0.01, 6),  # simplified theta
-            vega=round(greeks["vega"] / 100, 6),
-            rho=round(rho, 6),
-            method=req.pricing_method,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            req.dividend_yield,
+            req.option_type,
+            req.option_style,
+            req.pricing_method,
+            req.barrier_level,
+            req.barrier_type,
+            req.monte_carlo_paths,
+            42,
+            req.heston.model_dump() if req.heston else None,
         )
     except Exception as exc:
-        logger.exception("Option pricing failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Pricing failed: {exc}",
-        )
+        raise _fail(exc, "Pricing")
+    greeks = result["greeks"]
+    interval = result.get("confidence_interval")
+    return OptionPricingResponse(
+        price=round(result["price"], 6),
+        delta=round(greeks["delta"], 6),
+        gamma=round(greeks["gamma"], 6),
+        theta=round(greeks["theta"], 6),
+        vega=round(greeks["vega"], 6),
+        rho=round(greeks["rho"], 6),
+        method=result["method"],
+        option_style=req.option_style,
+        std_error=round(result["std_error"], 6) if "std_error" in result else None,
+        confidence_interval=[round(x, 6) for x in interval] if interval else None,
+        timestamp=_now(),
+    )
 
 
 @router.post("/implied-volatility")
 async def compute_implied_volatility(
     req: ImpliedVolRequest,
     current_user: User = Depends(get_current_active_user),
+    engine: PricingEngine = Depends(get_pricing_engine),
 ) -> Dict[str, Any]:
-    """
-    Back-solve for implied volatility given a market option price.
-
-    Uses a bisection solver accurate to 1e-6 in volatility space.
-    """
-    iv = _implied_vol_bisection(
-        req.market_price,
-        req.spot_price,
-        req.strike_price,
-        req.time_to_expiry,
-        req.risk_free_rate,
-        req.option_type,
-    )
-    if iv is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Implied volatility could not be solved for given market price",
+    try:
+        iv = await run_in_threadpool(
+            engine.implied_volatility,
+            req.market_price,
+            req.spot_price,
+            req.strike_price,
+            req.time_to_expiry,
+            req.risk_free_rate,
+            req.dividend_yield,
+            req.option_type,
+            req.option_style,
         )
+    except Exception as exc:
+        raise _fail(exc, "Implied volatility solve")
     return {
         "implied_volatility": round(iv, 6),
         "implied_volatility_pct": round(iv * 100, 4),
         "option_type": req.option_type,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "option_style": req.option_style,
+        "timestamp": _now(),
     }
 
 
@@ -221,35 +231,94 @@ async def compute_implied_volatility(
 async def compute_volatility_surface(
     req: VolatilitySurfaceRequest,
     current_user: User = Depends(get_current_active_user),
+    engine: PricingEngine = Depends(get_pricing_engine),
 ) -> Dict[str, Any]:
-    """
-    Generate a volatility surface grid (strikes × expiries).
-
-    Models smile via a quadratic skew centred at ATM.
-    """
-
-    surface: List[Dict[str, Any]] = []
-    for T in req.expiries:
-        for K in req.strikes:
-            moneyness = K / req.spot_price
-            # Quadratic smile: vol rises as you move away from ATM
-            skew = req.base_volatility * (1.0 + 0.5 * (moneyness - 1.0) ** 2)
-            iv = round(max(0.01, skew), 6)
-            call_price = _bs_call_price(req.spot_price, K, T, req.risk_free_rate, iv)
+    try:
+        extra: Dict[str, Any] = {}
+        if req.quotes:
+            fitted = await run_in_threadpool(
+                engine.fitted_surface,
+                req.spot_price,
+                [q.model_dump() for q in req.quotes],
+                req.strikes,
+                req.expiries,
+                req.risk_free_rate,
+                req.dividend_yield,
+                req.method,
+            )
+            points = fitted["points"]
+            extra = {
+                "source": "fitted",
+                "method": req.method,
+                "fit_metrics": fitted["metrics"],
+                "arbitrage": fitted["arbitrage"],
+            }
+        else:
+            points = engine.parametric_surface(
+                req.spot_price,
+                req.strikes,
+                req.expiries,
+                req.risk_free_rate,
+                req.dividend_yield,
+                req.base_volatility,
+            )
+            extra = {"source": "parametric"}
+        surface = []
+        for point in points:
+            iv = float(point["iv"])
+            call_price = engine.european_price(
+                req.spot_price,
+                point["strike"],
+                point["expiry"],
+                req.risk_free_rate,
+                iv,
+                req.dividend_yield,
+                "call",
+            )
             surface.append(
                 {
-                    "strike": K,
-                    "expiry_years": T,
-                    "implied_vol": iv,
+                    "strike": point["strike"],
+                    "expiry_years": point["expiry"],
+                    "implied_vol": round(iv, 6),
                     "call_price": round(call_price, 4),
                 }
             )
-
+    except Exception as exc:
+        raise _fail(exc, "Volatility surface")
     return {
         "spot_price": req.spot_price,
         "surface_points": len(surface),
         "surface": surface,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": _now(),
+        **extra,
+    }
+
+
+@router.post("/calibrate")
+async def calibrate_model(
+    req: CalibrationRequest,
+    current_user: User = Depends(get_current_active_user),
+    engine: PricingEngine = Depends(get_pricing_engine),
+) -> Dict[str, Any]:
+    try:
+        result = await run_in_threadpool(
+            engine.calibrate,
+            req.model,
+            [o.model_dump(exclude_none=True) for o in req.options],
+            req.spot_price,
+            req.risk_free_rate,
+            req.dividend_yield,
+        )
+    except Exception as exc:
+        raise _fail(exc, "Calibration")
+    return {
+        "model": req.model,
+        "parameters": {k: round(float(v), 6) for k, v in result["parameters"].items()},
+        "diagnostics": {
+            k: (round(v, 8) if isinstance(v, float) else v)
+            for k, v in result.get("diagnostics", {}).items()
+        },
+        "timestamp": _now(),
     }
 
 
@@ -261,20 +330,29 @@ async def quick_greeks(
     expiry_days: int = Query(..., ge=1, le=3650),
     volatility: float = Query(0.20, gt=0, le=5.0),
     risk_free_rate: float = Query(0.05, ge=0, le=1.0),
+    dividend_yield: float = Query(0.0, ge=0, le=1.0),
+    option_type: str = Query("call", pattern=r"^(call|put)$"),
     current_user: User = Depends(get_current_active_user),
+    engine: PricingEngine = Depends(get_pricing_engine),
 ) -> Dict[str, Any]:
-    """
-    Quick Greeks lookup for a single option via query parameters.
-    Useful for live dashboards that need low-latency responses.
-    """
     T = expiry_days / 365.0
-    greeks = _pricing.calculate_greeks(spot, strike, T, risk_free_rate, volatility)
+    try:
+        greeks = engine.calculate_greeks(
+            spot, strike, T, risk_free_rate, volatility, dividend_yield, option_type
+        )
+        price = engine.european_price(
+            spot, strike, T, risk_free_rate, volatility, dividend_yield, option_type
+        )
+    except Exception as exc:
+        raise _fail(exc, "Greeks calculation")
     return {
         "symbol": symbol.upper(),
         "spot": spot,
         "strike": strike,
         "expiry_days": expiry_days,
         "volatility": volatility,
+        "option_type": option_type,
+        "price": round(price, 6),
         "greeks": {k: round(v, 6) for k, v in greeks.items()},
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": _now(),
     }

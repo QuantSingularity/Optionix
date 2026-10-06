@@ -1,8 +1,3 @@
-"""
-Risk management routes for Optionix platform.
-Portfolio VaR, stress testing, Greeks aggregation, circuit breakers.
-"""
-
 import logging
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -10,24 +5,27 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_active_user
 from ..database import get_db
-from ..models import Account, Position, User
+from ..models import Account, MarketData, Position, User
 from ..services.pricing_engine import PricingEngine
 from ..services.risk_assessment import RiskCalculator
+from .analytics import get_pricing_engine
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/risk", tags=["Risk Management"])
 
 _risk_calc = RiskCalculator()
-_pricing = PricingEngine()
+
+DEFAULT_ANNUAL_VOLATILITY = 0.02 * np.sqrt(252.0)
+MIN_HISTORY = 30
 
 
 def _user_positions_query(user: User, db: Session):
-    """Positions belong to an Account, so scope to the user via a join."""
     return (
         db.query(Position)
         .join(Account, Position.account_id == Account.id)
@@ -35,7 +33,16 @@ def _user_positions_query(user: User, db: Session):
     )
 
 
-# ── Request schemas ────────────────────────────────────────────────────────
+class StressPosition(BaseModel):
+    option_type: str = Field("call", pattern=r"^(call|put)$")
+    spot: float = Field(..., gt=0)
+    strike: float = Field(..., gt=0)
+    time_to_expiry: float = Field(..., gt=0, le=10.0)
+    volatility: float = Field(..., gt=0, le=5.0)
+    quantity: float = Field(..., description="Signed contracts; negative for short")
+    rate: float = Field(0.05, ge=0, le=1.0)
+    dividend_yield: float = Field(0.0, ge=0, le=1.0)
+    multiplier: float = Field(1.0, gt=0, le=10_000)
 
 
 class StressTestRequest(BaseModel):
@@ -46,8 +53,10 @@ class StressTestRequest(BaseModel):
     portfolio_value: float = Field(
         ..., gt=0, description="Current portfolio value in USD"
     )
-    positions: Optional[List[Dict[str, Any]]] = Field(
-        None, description="Optional list of position overrides"
+    positions: Optional[List[StressPosition]] = Field(
+        None,
+        max_length=500,
+        description="Option positions to revalue under each scenario",
     )
 
 
@@ -62,9 +71,19 @@ class VaRRequest(BaseModel):
         pattern=r"^(historical|parametric|monte_carlo)$",
     )
     n_simulations: int = Field(default=10_000, ge=1_000, le=500_000)
+    annual_volatility: Optional[float] = Field(
+        default=None,
+        gt=0.01,
+        le=5.0,
+        description="Annualised volatility, for example a model forecast",
+    )
+    historical_returns: Optional[List[float]] = Field(
+        default=None, min_length=MIN_HISTORY, max_length=5000
+    )
 
 
 class GreeksHeatmapRequest(BaseModel):
+    option_type: str = Field(default="call", pattern=r"^(call|put)$")
     spot_range_pct: float = Field(
         default=0.20,
         gt=0,
@@ -79,8 +98,6 @@ class GreeksHeatmapRequest(BaseModel):
     )
     grid_steps: int = Field(default=5, ge=3, le=20)
 
-
-# ── Scenario shocks ───────────────────────────────────────────────────────
 
 _SCENARIO_SHOCKS: Dict[str, Dict[str, float]] = {
     "market_crash": {
@@ -122,57 +139,76 @@ _SCENARIO_SHOCKS: Dict[str, Dict[str, float]] = {
 }
 
 
-# ── Endpoints ──────────────────────────────────────────────────────────────
-
-
-@router.post("/var")
-async def calculate_var(
-    req: VaRRequest,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
-) -> Dict[str, Any]:
-    """
-    Calculate portfolio Value-at-Risk using historical, parametric, or
-    Monte Carlo simulation methods.
-
-    Returns VaR and CVaR at each requested confidence level.
-    """
-    positions = (
-        _user_positions_query(current_user, db).filter(Position.status == "open").all()
-    )
-
-    portfolio_value = (
-        float(sum((p.size * (p.current_price or p.entry_price)) for p in positions))
-        if positions
-        else 10_000.0
-    )  # default for empty portfolio
-
-    rng = np.random.default_rng(42)
-
-    if req.method == "monte_carlo":
-        daily_vol = 0.02
-        dt = req.time_horizon_days / 252.0
-        raw = rng.normal(0, daily_vol * (dt**0.5), req.n_simulations) * portfolio_value
-    elif req.method == "parametric":
-        from scipy import stats  # type: ignore
-
-        daily_vol = 0.02
-        raw = (
-            stats.norm.ppf(np.linspace(0.001, 0.999, req.n_simulations))
-            * daily_vol
-            * (req.time_horizon_days**0.5)
-            * portfolio_value
+def _history_returns(positions: List[Position], db: Session) -> Optional[np.ndarray]:
+    symbols = sorted({p.symbol for p in positions})
+    values = {
+        sym: float(
+            sum(
+                p.size * (p.current_price or p.entry_price)
+                for p in positions
+                if p.symbol == sym
+            )
         )
-    else:  # historical
-        daily_vol = 0.018
-        raw = rng.normal(0, daily_vol, req.n_simulations) * portfolio_value
+        for sym in symbols
+    }
+    total = sum(abs(v) for v in values.values())
+    if not symbols or total <= 0:
+        return None
+    series = {}
+    for sym in symbols:
+        rows = (
+            db.query(MarketData.close_price)
+            .filter(MarketData.symbol == sym)
+            .order_by(MarketData.timestamp.desc())
+            .limit(1000)
+            .all()
+        )
+        closes = np.array([float(r[0]) for r in reversed(rows)], dtype=float)
+        if closes.size < MIN_HISTORY + 1 or np.any(closes <= 0):
+            return None
+        series[sym] = np.diff(np.log(closes))
+    length = min(len(v) for v in series.values())
+    combined = np.zeros(length)
+    for sym, rets in series.items():
+        combined += (values[sym] / total) * rets[-length:]
+    return np.exp(combined) - 1.0
 
+
+def _compute_var(
+    req: VaRRequest,
+    engine: PricingEngine,
+    portfolio_value: float,
+    history: Optional[np.ndarray],
+) -> Dict[str, Any]:
+    volatility = req.annual_volatility or DEFAULT_ANNUAL_VOLATILITY
+    source = "request" if req.annual_volatility else "default_assumption"
+    if req.method == "historical":
+        if req.historical_returns:
+            returns = np.asarray(req.historical_returns, dtype=float)
+            source = "request_history"
+        elif history is not None:
+            returns = history
+            source = "market_data_history"
+        else:
+            returns = engine.simulate_returns(volatility, 1, req.n_simulations)
+            source = f"{source}_simulated"
+        if req.time_horizon_days > 1:
+            returns = np.expm1(
+                np.log1p(np.maximum(returns, -0.999999))
+                * np.sqrt(req.time_horizon_days)
+            )
+    elif req.method == "parametric":
+        returns = engine.parametric_returns(volatility, req.time_horizon_days)
+    else:
+        returns = engine.simulate_returns(
+            volatility, req.time_horizon_days, req.n_simulations
+        )
+    pnl = returns * portfolio_value
     results: Dict[str, Any] = {}
     for cl in req.confidence_levels:
-        var = _risk_calc.calculate_var(raw, confidence=cl)
-        cvar = _risk_calc.expected_shortfall(raw, confidence=cl)
-        key = f"cl_{int(cl * 100)}"
-        results[key] = {
+        var = _risk_calc.calculate_var(pnl, confidence=cl)
+        cvar = _risk_calc.expected_shortfall(pnl, confidence=cl)
+        results[f"cl_{int(round(cl * 100))}"] = {
             "confidence_level": cl,
             "var": round(var, 2),
             "cvar": round(cvar, 2),
@@ -180,13 +216,46 @@ async def calculate_var(
                 round(abs(var) / portfolio_value * 100, 4) if portfolio_value else 0
             ),
         }
+    return {"results": results, "volatility": volatility, "source": source}
 
+
+@router.post("/var")
+async def calculate_var(
+    req: VaRRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+    engine: PricingEngine = Depends(get_pricing_engine),
+) -> Dict[str, Any]:
+    if any(not 0.5 < cl < 1.0 for cl in req.confidence_levels):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Confidence levels must be between 0.5 and 1.0 exclusive",
+        )
+    positions = (
+        _user_positions_query(current_user, db).filter(Position.status == "open").all()
+    )
+    portfolio_value = (
+        float(sum((p.size * (p.current_price or p.entry_price)) for p in positions))
+        if positions
+        else 10_000.0
+    )
+    history = _history_returns(positions, db) if req.method == "historical" else None
+    try:
+        computed = await run_in_threadpool(
+            _compute_var, req, engine, portfolio_value, history
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        )
     return {
         "method": req.method,
         "time_horizon_days": req.time_horizon_days,
         "portfolio_value": round(portfolio_value, 2),
         "open_positions": len(positions),
-        "var_results": results,
+        "annual_volatility": round(computed["volatility"], 6),
+        "volatility_source": computed["source"],
+        "var_results": computed["results"],
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -196,56 +265,61 @@ async def run_stress_test(
     req: StressTestRequest,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
+    engine: PricingEngine = Depends(get_pricing_engine),
 ) -> Dict[str, Any]:
-    """
-    Run named stress-test scenarios against the portfolio.
-
-    Each scenario applies correlated shocks to prices, volatility, and
-    interest rates, then reports the estimated P&L impact.
-    """
     invalid = [s for s in req.scenarios if s not in _SCENARIO_SHOCKS]
     if invalid:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Unknown scenarios: {invalid}. Available: {list(_SCENARIO_SHOCKS)}",
         )
+    positions = [p.model_dump() for p in req.positions] if req.positions else None
 
-    scenario_results = []
-    for scenario_name in req.scenarios:
-        shock = _SCENARIO_SHOCKS[scenario_name]
-        price_impact = req.portfolio_value * shock["price_shock"]
-        vol_impact = (
-            req.portfolio_value * shock["vol_shock"] * -0.02
-        )  # vol hurts long vega
-        total_pnl = price_impact + vol_impact
-        pct_loss = total_pnl / req.portfolio_value * 100
+    def run() -> List[Dict[str, Any]]:
+        out = []
+        for scenario_name in req.scenarios:
+            shock = _SCENARIO_SHOCKS[scenario_name]
+            if positions:
+                total_pnl = engine.revalue_scenario(
+                    positions,
+                    shock["price_shock"],
+                    shock["vol_shock"],
+                    shock["rate_shock"],
+                )
+            else:
+                total_pnl = req.portfolio_value * shock["price_shock"] + (
+                    req.portfolio_value * shock["vol_shock"] * -0.02
+                )
+            pct_loss = total_pnl / req.portfolio_value * 100
+            out.append(
+                {
+                    "scenario": scenario_name,
+                    "description": shock["description"],
+                    "shocks": {
+                        "price_pct": shock["price_shock"] * 100,
+                        "volatility_pct": shock["vol_shock"] * 100,
+                        "rate_bps": shock["rate_shock"] * 10_000,
+                    },
+                    "estimated_pnl": round(total_pnl, 2),
+                    "estimated_pnl_pct": round(pct_loss, 4),
+                    "severity": (
+                        "critical"
+                        if pct_loss < -20
+                        else (
+                            "high"
+                            if pct_loss < -10
+                            else "medium" if pct_loss < -5 else "low"
+                        )
+                    ),
+                }
+            )
+        return out
 
-        scenario_results.append(
-            {
-                "scenario": scenario_name,
-                "description": shock["description"],
-                "shocks": {
-                    "price_pct": shock["price_shock"] * 100,
-                    "volatility_pct": shock["vol_shock"] * 100,
-                    "rate_bps": shock["rate_shock"] * 10_000,
-                },
-                "estimated_pnl": round(total_pnl, 2),
-                "estimated_pnl_pct": round(pct_loss, 4),
-                "severity": (
-                    "critical"
-                    if pct_loss < -20
-                    else (
-                        "high"
-                        if pct_loss < -10
-                        else "medium" if pct_loss < -5 else "low"
-                    )
-                ),
-            }
-        )
-
+    scenario_results = await run_in_threadpool(run)
     worst = min(scenario_results, key=lambda x: x["estimated_pnl"])
     return {
         "portfolio_value": req.portfolio_value,
+        "valuation_method": "full_revaluation" if positions else "linear_approximation",
         "scenarios_run": len(scenario_results),
         "worst_case_scenario": worst["scenario"],
         "worst_case_pnl": worst["estimated_pnl"],
@@ -259,12 +333,6 @@ async def portfolio_greeks(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """
-    Aggregate net Greeks across all open positions.
-
-    Delta, Gamma, Theta, Vega and Rho are summed with correct sign
-    conventions (long = positive, short = negative).
-    """
     positions = (
         _user_positions_query(current_user, db).filter(Position.status == "open").all()
     )
@@ -302,17 +370,12 @@ async def greeks_heatmap(
     strike: float = Query(..., gt=0),
     expiry_days: int = Query(..., ge=1, le=3650),
     base_vol: float = Query(0.20, gt=0, le=5.0),
+    rate: float = Query(0.05, ge=0, le=1.0),
     current_user: User = Depends(get_current_active_user),
+    engine: PricingEngine = Depends(get_pricing_engine),
 ) -> Dict[str, Any]:
-    """
-    Generate a Delta / Gamma heatmap over a spot × volatility grid.
-
-    Useful for visualising how Greeks change as market conditions shift.
-    """
     T = expiry_days / 365.0
-    r = 0.05
     n = req.grid_steps
-
     spots = np.linspace(
         spot * (1 - req.spot_range_pct), spot * (1 + req.spot_range_pct), n
     )
@@ -322,23 +385,36 @@ async def greeks_heatmap(
         n,
     )
 
-    grid = []
-    for s in spots:
-        for v in vols:
-            g = _pricing.calculate_greeks(float(s), strike, T, r, float(v))
-            grid.append(
-                {
-                    "spot": round(float(s), 2),
-                    "volatility": round(float(v), 4),
-                    "delta": round(g["delta"], 6),
-                    "gamma": round(g["gamma"], 6),
-                    "vega": round(g["vega"], 6),
-                }
-            )
+    def build() -> List[Dict[str, Any]]:
+        grid = []
+        for s_value in spots:
+            for v_value in vols:
+                g = engine.calculate_greeks(
+                    float(s_value),
+                    strike,
+                    T,
+                    rate,
+                    float(v_value),
+                    0.0,
+                    req.option_type,
+                )
+                grid.append(
+                    {
+                        "spot": round(float(s_value), 2),
+                        "volatility": round(float(v_value), 4),
+                        "delta": round(g["delta"], 6),
+                        "gamma": round(g["gamma"], 6),
+                        "vega": round(g["vega"], 6),
+                        "theta": round(g["theta"], 6),
+                    }
+                )
+        return grid
 
+    grid = await run_in_threadpool(build)
     return {
         "strike": strike,
         "expiry_days": expiry_days,
+        "option_type": req.option_type,
         "grid_points": len(grid),
         "heatmap": grid,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -350,7 +426,6 @@ async def get_risk_limits(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """Return current risk limits and utilisation for the authenticated user."""
     accounts = db.query(Account).filter(Account.user_id == current_user.id).all()
     total_risk_limit = (
         sum(a.risk_limit for a in accounts) if accounts else Decimal("100000")
@@ -382,11 +457,6 @@ async def get_risk_limits(
 async def circuit_breaker_status(
     current_user: User = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
-    """
-    Return the status of all trading circuit breakers.
-
-    Circuit breakers automatically halt trading when risk thresholds are exceeded.
-    """
     return {
         "circuit_breakers": [
             {

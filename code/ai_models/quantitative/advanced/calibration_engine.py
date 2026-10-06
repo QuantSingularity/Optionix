@@ -1,243 +1,192 @@
-"""
-Market Calibration Framework for option pricing models.
-
-This module implements calibration engines for various option pricing models
-to ensure they match market prices.
-"""
-
 import logging
-from typing import Any
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+from ..black_scholes import bs_price, implied_volatility_from_price
+from .local_volatility import CEVModel, DupireLocalVolModel
+from .stochastic_volatility import HestonModel, SabrModel
+
 logger = logging.getLogger(__name__)
+
+OptionData = Union[Dict[str, Any], Sequence[Dict[str, Any]]]
 
 
 class CalibrationEngine:
-    """
-    Implementation of calibration engine for option pricing models.
+    def __init__(
+        self,
+        spot: Optional[float] = None,
+        rate: float = 0.02,
+        dividend: float = 0.0,
+    ) -> None:
+        self.spot = spot
+        self.rate = rate
+        self.dividend = dividend
 
-    This class provides methods to calibrate various option pricing models
-    to market data.
-    """
+    def _resolve_spot(self, spot: Optional[float]) -> float:
+        value = spot if spot is not None else self.spot
+        if value is None or value <= 0:
+            raise ValueError("A positive spot price is required for calibration")
+        return float(value)
 
-    def __init__(self) -> None:
-        """
-        Initialize calibration engine.
-        """
-
-    def calibrate_heston(self, option_data: Any, initial_params: Any = None) -> Any:
-        """
-        Calibrate Heston model parameters to market data.
-
-        Args:
-            option_data (dict or list): Option data
-                If dict: Expected format is {"calls": [...], "puts": [...]}
-                If list: List of option data dictionaries
-            initial_params (dict, optional): Initial parameters for calibration
-
-        Returns:
-            dict: Calibrated parameters
-        """
-        from quantitative.advanced.stochastic_volatility import HestonModel
-
-        heston = HestonModel(initial_params)
-        options = []
+    @staticmethod
+    def _flatten(option_data: OptionData) -> List[Dict[str, Any]]:
         if isinstance(option_data, dict):
-            if "calls" in option_data:
-                for call in option_data["calls"]:
-                    options.append(
-                        {
-                            "strike": call["strike"],
-                            "expiry": call.get("expiry", 0.5),
-                            "price": (
-                                call["price"]
-                                if "price" in call
-                                else self._bs_price_from_iv(
-                                    call["iv"], call["strike"], 0.5, "call"
-                                )
-                            ),
-                            "option_type": "call",
-                        }
-                    )
-            if "puts" in option_data:
-                for put in option_data["puts"]:
-                    options.append(
-                        {
-                            "strike": put["strike"],
-                            "expiry": put.get("expiry", 0.5),
-                            "price": (
-                                put["price"]
-                                if "price" in put
-                                else self._bs_price_from_iv(
-                                    put["iv"], put["strike"], 0.5, "put"
-                                )
-                            ),
-                            "option_type": "put",
-                        }
-                    )
-        else:
-            options = option_data
-        calibrated_params = heston.calibrate(options)
-        return calibrated_params
+            flat = []
+            for side, option_type in (("calls", "call"), ("puts", "put")):
+                for entry in option_data.get(side, []):
+                    item = dict(entry)
+                    item.setdefault("option_type", option_type)
+                    flat.append(item)
+            return flat
+        return [dict(item) for item in option_data]
 
-    def calibrate_sabr(self, option_data: Any, initial_params: Any = None) -> Any:
-        """
-        Calibrate SABR model parameters to market data.
-
-        Args:
-            option_data (dict or list): Option data
-                If dict: Expected format is {"calls": [...], "puts": [...]}
-                If list: List of option data dictionaries
-            initial_params (dict, optional): Initial parameters for calibration
-
-        Returns:
-            dict: Calibrated parameters
-        """
-        from quantitative.advanced.stochastic_volatility import SabrModel
-
-        sabr = SabrModel(initial_params)
-        options = []
-        if isinstance(option_data, dict):
-            spot = 450.0
-            if "calls" in option_data:
-                for call in option_data["calls"]:
-                    options.append(
-                        {
-                            "strike": call["strike"],
-                            "forward": call.get("forward", spot),
-                            "time_to_expiry": call.get("expiry", 0.5),
-                            "market_vol": call["iv"],
-                        }
+    def _normalise(
+        self,
+        option_data: OptionData,
+        spot: float,
+        rate: float,
+        dividend: float,
+    ) -> List[Dict[str, Any]]:
+        normalised = []
+        for item in self._flatten(option_data):
+            expiry = float(item.get("expiry", item.get("time_to_expiry", 0.5)))
+            option_type = str(item.get("option_type", "call")).lower()
+            strike = float(item["strike"])
+            if expiry <= 0 or strike <= 0:
+                continue
+            price = item.get("price", item.get("market_price"))
+            if price is None:
+                iv = item.get(
+                    "iv", item.get("implied_volatility", item.get("market_vol"))
+                )
+                if iv is None:
+                    raise ValueError(
+                        "Each option needs a price or an implied volatility"
                     )
-            if "puts" in option_data:
-                for put in option_data["puts"]:
-                    options.append(
-                        {
-                            "strike": put["strike"],
-                            "forward": put.get("forward", spot),
-                            "time_to_expiry": put.get("expiry", 0.5),
-                            "market_vol": put["iv"],
-                        }
+                price = float(
+                    bs_price(
+                        spot, strike, expiry, rate, float(iv), dividend, option_type
                     )
-        else:
-            options = option_data
-        calibrated_params = sabr.calibrate(options)
-        return calibrated_params
+                )
+            normalised.append(
+                {
+                    "strike": strike,
+                    "expiry": expiry,
+                    "price": float(price),
+                    "option_type": option_type,
+                }
+            )
+        if not normalised:
+            raise ValueError("No usable option data supplied")
+        return normalised
+
+    def calibrate_heston(
+        self,
+        option_data: OptionData,
+        initial_params: Optional[Dict[str, float]] = None,
+        spot: Optional[float] = None,
+        rate: Optional[float] = None,
+        dividend: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        s = self._resolve_spot(spot)
+        r = self.rate if rate is None else rate
+        q = self.dividend if dividend is None else dividend
+        quotes = [
+            {
+                "spot": s,
+                "strike": o["strike"],
+                "time_to_expiry": o["expiry"],
+                "rate": r,
+                "dividend": q,
+                "option_type": o["option_type"],
+                "market_price": o["price"],
+            }
+            for o in self._normalise(option_data, s, r, q)
+        ]
+        model = HestonModel(initial_params)
+        params = model.calibrate(quotes)
+        return {"parameters": params, "diagnostics": model.calibration_info}
+
+    def calibrate_sabr(
+        self,
+        option_data: OptionData,
+        initial_params: Optional[Dict[str, float]] = None,
+        spot: Optional[float] = None,
+        rate: Optional[float] = None,
+        dividend: Optional[float] = None,
+        fix_beta: bool = True,
+    ) -> Dict[str, Any]:
+        s = self._resolve_spot(spot)
+        r = self.rate if rate is None else rate
+        q = self.dividend if dividend is None else dividend
+        quotes = []
+        for o in self._normalise(option_data, s, r, q):
+            forward = s * np.exp((r - q) * o["expiry"])
+            try:
+                vol = implied_volatility_from_price(
+                    o["price"], s, o["strike"], o["expiry"], r, q, o["option_type"]
+                )
+            except ValueError:
+                continue
+            quotes.append(
+                {
+                    "strike": o["strike"],
+                    "forward": float(forward),
+                    "time_to_expiry": o["expiry"],
+                    "market_vol": vol,
+                }
+            )
+        model = SabrModel(initial_params)
+        params = model.calibrate(quotes, fix_beta=fix_beta)
+        return {"parameters": params, "diagnostics": model.calibration_info}
 
     def calibrate_local_volatility(
-        self, option_data: Any, spot: Any, rate: Any, dividend: Any = 0
-    ) -> Any:
-        """
-        Calibrate local volatility model to market data.
+        self,
+        option_data: OptionData,
+        spot: Optional[float] = None,
+        rate: Optional[float] = None,
+        dividend: Optional[float] = None,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        s = self._resolve_spot(spot)
+        r = self.rate if rate is None else rate
+        q = self.dividend if dividend is None else dividend
+        options = self._normalise(option_data, s, r, q)
+        return DupireLocalVolModel().calibrate(options, s, r, q)
 
-        Args:
-            option_data (dict or list): Option data
-                If dict: Expected format is {"calls": [...], "puts": [...]}
-                If list: List of option data dictionaries
-            spot (float): Spot price
-            rate (float): Risk-free interest rate
-            dividend (float): Dividend yield
-
-        Returns:
-            tuple: (local_vol_surface, strike_grid, time_grid)
-        """
-        from quantitative.advanced.local_volatility import DupireLocalVolModel
-
-        dupire = DupireLocalVolModel()
-        options = []
-        if isinstance(option_data, dict):
-            if "calls" in option_data:
-                for call in option_data["calls"]:
-                    options.append(
-                        {
-                            "strike": call["strike"],
-                            "expiry": call.get("expiry", 0.5),
-                            "price": (
-                                call["price"]
-                                if "price" in call
-                                else self._bs_price_from_iv(
-                                    call["iv"],
-                                    call["strike"],
-                                    0.5,
-                                    "call",
-                                    spot,
-                                    rate,
-                                    dividend,
-                                )
-                            ),
-                            "option_type": "call",
-                        }
-                    )
-            if "puts" in option_data:
-                for put in option_data["puts"]:
-                    options.append(
-                        {
-                            "strike": put["strike"],
-                            "expiry": put.get("expiry", 0.5),
-                            "price": (
-                                put["price"]
-                                if "price" in put
-                                else self._bs_price_from_iv(
-                                    put["iv"],
-                                    put["strike"],
-                                    0.5,
-                                    "put",
-                                    spot,
-                                    rate,
-                                    dividend,
-                                )
-                            ),
-                            "option_type": "put",
-                        }
-                    )
-        else:
-            options = option_data
-        local_vol_surface, strike_grid, time_grid = dupire.calibrate(
-            options, spot, rate, dividend
+    def calibrate_cev(
+        self,
+        option_data: OptionData,
+        spot: Optional[float] = None,
+        rate: Optional[float] = None,
+        dividend: Optional[float] = None,
+        fix_beta: bool = False,
+    ) -> Dict[str, float]:
+        s = self._resolve_spot(spot)
+        r = self.rate if rate is None else rate
+        q = self.dividend if dividend is None else dividend
+        return CEVModel().calibrate(
+            self._normalise(option_data, s, r, q), s, r, q, fix_beta=fix_beta
         )
-        return (local_vol_surface, strike_grid, time_grid)
 
     def _bs_price_from_iv(
         self,
-        iv: Any,
-        strike: Any,
-        time_to_expiry: Any,
-        option_type: Any,
-        spot: Any = 450.0,
-        rate: Any = 0.02,
-        dividend: Any = 0.01,
-    ) -> Any:
-        """
-        Calculate Black-Scholes price from implied volatility.
-
-        Args:
-            iv (float): Implied volatility
-            strike (float): Strike price
-            time_to_expiry (float): Time to expiry in years
-            option_type (str): Option type ('call' or 'put')
-            spot (float): Spot price
-            rate (float): Risk-free interest rate
-            dividend (float): Dividend yield
-
-        Returns:
-            float: Option price
-        """
-        from scipy import stats
-
-        d1 = (
-            np.log(spot / strike) + (rate - dividend + 0.5 * iv**2) * time_to_expiry
-        ) / (iv * np.sqrt(time_to_expiry))
-        d2 = d1 - iv * np.sqrt(time_to_expiry)
-        if option_type.lower() == "call":
-            price = spot * np.exp(-dividend * time_to_expiry) * stats.norm.cdf(
-                d1
-            ) - strike * np.exp(-rate * time_to_expiry) * stats.norm.cdf(d2)
-        else:
-            price = strike * np.exp(-rate * time_to_expiry) * stats.norm.cdf(
-                -d2
-            ) - spot * np.exp(-dividend * time_to_expiry) * stats.norm.cdf(-d1)
-        return price
+        iv: float,
+        strike: float,
+        time_to_expiry: float,
+        option_type: str,
+        spot: Optional[float] = None,
+        rate: Optional[float] = None,
+        dividend: Optional[float] = None,
+    ) -> float:
+        return float(
+            bs_price(
+                self._resolve_spot(spot),
+                strike,
+                time_to_expiry,
+                self.rate if rate is None else rate,
+                iv,
+                self.dividend if dividend is None else dividend,
+                option_type,
+            )
+        )

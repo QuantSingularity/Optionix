@@ -1,5 +1,3 @@
-"""Integration tests for Optionix backend."""
-
 import time
 
 
@@ -27,7 +25,6 @@ def _register_and_login(client, tag: str = ""):
 class TestFullRegistrationLoginFlow:
     def test_register_login_access_profile(self, client):
         email = _unique_email("flow")
-        # Register
         reg = client.post(
             "/auth/register",
             json={
@@ -38,14 +35,12 @@ class TestFullRegistrationLoginFlow:
         )
         assert reg.status_code == 200
 
-        # Login
         login = client.post(
             "/auth/login", json={"email": email, "password": "TestPassword123!"}
         )
         assert login.status_code == 200
         token = login.json()["access_token"]
 
-        # Access protected endpoint
         me = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
         assert me.status_code == 200
         assert me.json()["email"] == email
@@ -64,19 +59,19 @@ class TestFullRegistrationLoginFlow:
         assert refresh.status_code == 200
         new_token = refresh.json()["access_token"]
 
-        # New access token works
         me = client.get("/auth/me", headers={"Authorization": f"Bearer {new_token}"})
         assert me.status_code == 200
 
 
 class TestAPIErrorHandling:
-    def test_root_to_volatility_flow(self, client):
+    def test_root_to_volatility_flow(self, client, auth_headers):
         root = client.get("/")
         assert root.status_code == 200
         assert root.json()["status"] in ("online", "healthy")
 
         vol = client.post(
             "/market/volatility",
+            headers=auth_headers,
             json={
                 "symbol": "ETH",
                 "open": 3000.0,
@@ -85,7 +80,21 @@ class TestAPIErrorHandling:
                 "volume": 500000.0,
             },
         )
-        assert vol.status_code in [200, 400, 422, 500]
+        assert vol.status_code == 200, vol.text
+        assert float(vol.json()["volatility"]) > 0
+
+    def test_volatility_requires_authentication(self, client):
+        resp = client.post(
+            "/market/volatility",
+            json={
+                "symbol": "ETH",
+                "open": 3000.0,
+                "high": 3100.0,
+                "low": 2900.0,
+                "volume": 1.0,
+            },
+        )
+        assert resp.status_code == 401
 
     def test_unauthenticated_access_consistently_401(self, client):
         resp = client.get("/auth/me")
@@ -118,8 +127,7 @@ class TestRateLimitHeaders:
         r2 = client.get("/")
         remaining1 = int(r1.headers.get("x-ratelimit-remaining", 9999))
         remaining2 = int(r2.headers.get("x-ratelimit-remaining", 9998))
-        # remaining should be <= (it decreases or resets between windows)
-        assert remaining2 <= remaining1 + 1  # +1 tolerance for window resets
+        assert remaining2 <= remaining1 + 1
 
 
 class TestMultipleUsersIsolation:

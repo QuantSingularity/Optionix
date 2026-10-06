@@ -6,6 +6,8 @@ const riskService = {
     timeHorizonDays = 1,
     method = "historical",
     nSimulations,
+    annualVolatility,
+    historicalReturns,
   } = {}) =>
     apiClient
       .post("/risk/var", {
@@ -13,6 +15,8 @@ const riskService = {
         time_horizon_days: timeHorizonDays,
         method,
         n_simulations: nSimulations,
+        annual_volatility: annualVolatility,
+        historical_returns: historicalReturns,
       })
       .then((r) => r.data),
 

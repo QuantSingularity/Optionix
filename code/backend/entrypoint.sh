@@ -37,7 +37,6 @@ validate_environment() {
         "DATABASE_URL"
         "REDIS_URL"
         "SECRET_KEY"
-        "JWT_SECRET"
         "ENCRYPTION_KEY"
     )
 
@@ -60,12 +59,12 @@ check_database() {
 
     while [ $attempt -le $max_attempts ]; do
         if python3 -c "
-import psycopg2
 import os
+from sqlalchemy import create_engine, text
 try:
-    conn = psycopg2.connect(os.environ['DATABASE_URL'])
-    conn.close()
-    print('Database connection successful')
+    engine = create_engine(os.environ['DATABASE_URL'])
+    with engine.connect() as conn:
+        conn.execute(text('SELECT 1'))
     exit(0)
 except Exception as e:
     print(f'Database connection failed: {e}')

@@ -9,8 +9,12 @@ const analyticsService = {
     volatility,
     optionType = "call",
     dividendYield,
+    optionStyle = "european",
     pricingMethod = "black_scholes",
     monteCarloPaths,
+    barrierLevel,
+    barrierType,
+    heston,
   }) =>
     apiClient
       .post("/analytics/price", {
@@ -21,8 +25,12 @@ const analyticsService = {
         volatility,
         option_type: optionType,
         dividend_yield: dividendYield,
+        option_style: optionStyle,
         pricing_method: pricingMethod,
         monte_carlo_paths: monteCarloPaths,
+        barrier_level: barrierLevel,
+        barrier_type: barrierType,
+        heston,
       })
       .then((r) => r.data),
 
@@ -32,7 +40,9 @@ const analyticsService = {
     strikePrice,
     timeToExpiry,
     riskFreeRate,
+    dividendYield,
     optionType = "call",
+    optionStyle = "european",
   }) =>
     apiClient
       .post("/analytics/implied-volatility", {
@@ -41,7 +51,9 @@ const analyticsService = {
         strike_price: strikePrice,
         time_to_expiry: timeToExpiry,
         risk_free_rate: riskFreeRate,
+        dividend_yield: dividendYield,
         option_type: optionType,
+        option_style: optionStyle,
       })
       .then((r) => r.data),
 
@@ -50,7 +62,10 @@ const analyticsService = {
     strikes,
     expiries,
     riskFreeRate,
+    dividendYield,
     baseVolatility,
+    quotes,
+    method,
   }) =>
     apiClient
       .post("/analytics/volatility-surface", {
@@ -58,13 +73,35 @@ const analyticsService = {
         strikes,
         expiries,
         risk_free_rate: riskFreeRate,
+        dividend_yield: dividendYield,
         base_volatility: baseVolatility,
+        quotes,
+        method,
+      })
+      .then((r) => r.data),
+
+  calibrate: ({ model, spotPrice, riskFreeRate, dividendYield, options }) =>
+    apiClient
+      .post("/analytics/calibrate", {
+        model,
+        spot_price: spotPrice,
+        risk_free_rate: riskFreeRate,
+        dividend_yield: dividendYield,
+        options,
       })
       .then((r) => r.data),
 
   quickGreeks: (
     symbol,
-    { spot, strike, expiryDays, volatility, riskFreeRate },
+    {
+      spot,
+      strike,
+      expiryDays,
+      volatility,
+      riskFreeRate,
+      dividendYield,
+      optionType,
+    },
   ) =>
     apiClient
       .get(`/analytics/greeks/${symbol}`, {
@@ -74,6 +111,8 @@ const analyticsService = {
           expiry_days: expiryDays,
           volatility,
           risk_free_rate: riskFreeRate,
+          dividend_yield: dividendYield,
+          option_type: optionType,
         },
       })
       .then((r) => r.data),

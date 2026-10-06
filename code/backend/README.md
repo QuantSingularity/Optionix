@@ -31,8 +31,9 @@ backend/
 │   ├── services/
 │   │   ├── financial_service.py    # Black-Scholes, VaR, PnL, fees
 │   │   ├── compliance_service.py   # KYC, AML, SAR, sanctions
+│   │   ├── ai_bridge.py            # Locates the ai_models package
 │   │   ├── model_service.py        # ML volatility prediction
-│   │   ├── pricing_engine.py       # Greeks + Monte Carlo pricing
+│   │   ├── pricing_engine.py       # Facade over ai_models pricing
 │   │   ├── risk_assessment.py      # VaR, ES, margin helpers
 │   │   ├── health_service.py       # Aggregated service health
 │   │   ├── blockchain_service.py   # Ethereum / Web3 (optional)
@@ -86,32 +87,52 @@ API docs: http://localhost:8000/docs
 ## Running Tests
 
 ```bash
-make test           # run all 189 tests
+make test           # run the full suite
 make test-cov       # with HTML coverage report
 ```
 
 ## Key Environment Variables
 
-| Variable         | Required | Notes                                                |
-| ---------------- | -------- | ---------------------------------------------------- |
-| `SECRET_KEY`     | ✅       | ≥ 32 random chars                                    |
-| `ENCRYPTION_KEY` | ✅       | Exactly 32 chars                                     |
-| `DATABASE_URL`   | ✅       | PostgreSQL in prod; SQLite auto-used in tests        |
-| `ENVIRONMENT`    | -        | `development` / `staging` / `production` / `testing` |
+| Variable              | Required | Notes                                                |
+| --------------------- | -------- | ---------------------------------------------------- |
+| `SECRET_KEY`          | Yes      | ≥ 32 random chars                                    |
+| `ENCRYPTION_KEY`      | Yes      | Exactly 32 chars                                     |
+| `DATABASE_URL`        | Yes      | PostgreSQL in prod; SQLite auto-used in tests        |
+| `ENVIRONMENT`         | -        | `development` / `staging` / `production` / `testing` |
+| `AI_MODELS_DIR`       | -        | Path to the `ai_models` package if not auto-detected |
+| `MODEL_PATH`          | -        | Override for the model artifact location             |
+| `MODEL_AUTO_GENERATE` | -        | `true` to build model artifacts on first start       |
 
 See `.env.example` for the full list.
 
 ## API Endpoints
 
-| Method | Path                 | Auth | Description           |
-| ------ | -------------------- | ---- | --------------------- |
-| GET    | `/`                  | -    | Welcome / status      |
-| GET    | `/health`            | -    | Full service health   |
-| POST   | `/auth/register`     | -    | Create account        |
-| POST   | `/auth/login`        | -    | Login → JWT pair      |
-| GET    | `/auth/me`           | 🔒   | Current user profile  |
-| POST   | `/auth/refresh`      | -    | Refresh access token  |
-| POST   | `/market/volatility` | -    | Volatility prediction |
+| Method | Path                            | Auth | Description                                                              |
+| ------ | ------------------------------- | ---- | ------------------------------------------------------------------------ |
+| GET    | `/`                             | -    | Welcome / status                                                         |
+| GET    | `/health`                       | -    | Full service health                                                      |
+| POST   | `/auth/register`                | -    | Create account                                                           |
+| POST   | `/auth/login`                   | -    | Login, returns JWT pair                                                  |
+| GET    | `/auth/me`                      | Yes  | Current user profile                                                     |
+| POST   | `/auth/refresh`                 | -    | Refresh access token                                                     |
+| POST   | `/market/volatility`            | Yes  | Volatility forecast from the latest OHLC bar                             |
+| GET    | `/market/model-info`            | Yes  | Loaded model version, metrics and fallback status                        |
+| POST   | `/analytics/price`              | Yes  | European, American and barrier pricing: analytic, Monte Carlo or Heston  |
+| POST   | `/analytics/implied-volatility` | Yes  | Implied volatility, including American exercise                          |
+| POST   | `/analytics/volatility-surface` | Yes  | Parametric or fitted (SVI, SABR, spline) surface with arbitrage report   |
+| POST   | `/analytics/calibrate`          | Yes  | Calibrate Heston, SABR or CEV to option quotes                           |
+| GET    | `/analytics/greeks/{symbol}`    | Yes  | Greeks and price for a call or put                                       |
+| POST   | `/risk/var`                     | Yes  | Value at Risk by historical, parametric or Monte Carlo method            |
+| POST   | `/risk/stress-test`             | Yes  | Scenario stress tests, with full revaluation when positions are supplied |
+
+## AI Models Integration
+
+The `ai_models` package is located at startup by `app/services/ai_bridge.py`. `PricingEngine` wraps `ai_models.quantitative` and `ModelService` wraps `ai_models.volatility.inference`.
+
+- Generate model artifacts with `python -m ai_models.training.generate_artifacts` from the `code` directory. Docker builds do this automatically.
+- When artifacts are missing or fail their SHA-256 check, `/market/volatility` falls back to a statistical range estimator and `/market/model-info` reports `fallback_active`.
+- The volatility endpoint returns an annualised figure that scales with the requested timeframe.
+- CPU heavy endpoints run in a worker thread so they do not block the event loop.
 
 ## Docker
 

@@ -36,7 +36,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements first for better caching
-COPY requirements.txt .
+COPY backend/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
@@ -64,7 +64,8 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code
-COPY --chown=optionix:optionix . .
+COPY --chown=optionix:optionix backend/ /app/
+COPY --chown=optionix:optionix ai_models/ /app/ai_models/
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/data /app/uploads && \
@@ -72,12 +73,16 @@ RUN mkdir -p /app/logs /app/data /app/uploads && \
 
 # Set environment variables
 ENV PYTHONPATH=/app \
+    AI_MODELS_DIR=/app/ai_models \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     ENVIRONMENT=production \
     LOG_LEVEL=INFO
+
+RUN python -m ai_models.training.generate_artifacts --output /app/ai_models/artifacts && \
+    chown -R optionix:optionix /app/ai_models
 
 # Security hardening
 RUN chmod -R 755 /app && \
@@ -97,4 +102,4 @@ EXPOSE 8000
 ENTRYPOINT ["/app/entrypoint.sh"]
 
 # Default command
-CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]

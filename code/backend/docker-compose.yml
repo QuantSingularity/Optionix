@@ -3,8 +3,8 @@ version: "3.8"
 services:
   app:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: backend/Dockerfile
       args:
         BUILD_DATE: ${BUILD_DATE:-unknown}
         VCS_REF: ${VCS_REF:-unknown}
@@ -100,11 +100,11 @@ services:
 
   celery-worker:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: backend/Dockerfile
     container_name: optionix-celery-worker
     restart: unless-stopped
-    command: celery -A backend.app worker --loglevel=info --concurrency=4
+    command: celery -A app.main worker --loglevel=info --concurrency=4
     environment:
       - DATABASE_URL=postgresql://optionix:${POSTGRES_PASSWORD}@postgres:5432/optionix
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
@@ -128,11 +128,11 @@ services:
 
   celery-beat:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: backend/Dockerfile
     container_name: optionix-celery-beat
     restart: unless-stopped
-    command: celery -A backend.app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+    command: celery -A app.main beat --loglevel=info --schedule=/tmp/celerybeat-schedule
     environment:
       - DATABASE_URL=postgresql://optionix:${POSTGRES_PASSWORD}@postgres:5432/optionix
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0

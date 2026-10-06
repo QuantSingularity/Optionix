@@ -1,9 +1,0 @@
-{
-  "model_type": "GradientBoostingRegressor",
-  "version": "1.0.0",
-  "created_at": "2026-04-20T15:37:40.813044+00:00",
-  "features": ["open", "high", "low", "volume"],
-  "target": "volatility",
-  "training_samples": 5000,
-  "description": "Volatility prediction model trained on synthetic OHLCV data. Replace with real market data for production use."
-}

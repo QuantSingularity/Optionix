@@ -1,399 +1,260 @@
-"""
-Local Volatility Models for option pricing.
-
-This module implements local volatility models including the Dupire model
-for more accurate option pricing with volatility skew and smile.
-"""
-
 import logging
-from datetime import datetime
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
-import matplotlib.pyplot as plt
 import numpy as np
-from scipy import stats
-from scipy.optimize import minimize
+from scipy.interpolate import RegularGridInterpolator
+from scipy.optimize import least_squares
+from scipy.stats import ncx2
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+from ..black_scholes import bs_price, implied_volatility_from_price
+from .volatility_surface import OptionData, VolatilitySurface
+
 logger = logging.getLogger(__name__)
 
 
+def _expiry_to_years(expiry: Any) -> float:
+    if isinstance(expiry, str):
+        expiry_date = datetime.strptime(expiry, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        return (expiry_date - datetime.now(timezone.utc)).total_seconds() / (
+            365.0 * 86400.0
+        )
+    return float(expiry)
+
+
 class DupireLocalVolModel:
-    """
-    Implementation of the Dupire local volatility model.
-
-    The Dupire model derives the local volatility surface from market option prices,
-    allowing for accurate pricing of exotic options consistent with vanilla option prices.
-    """
-
-    def __init__(self, config: Any = None) -> None:
-        """
-        Initialize Dupire local volatility model.
-
-        Args:
-            config (dict, optional): Configuration parameters
-        """
-        self.config = config or {}
-        self.local_vol_surface = None
-        self.strike_grid = None
-        self.time_grid = None
-        self.default_vol = 0.2
+    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+        self.config = dict(config or {})
+        self.default_vol = self.config.get("default_vol", 0.2)
+        self.min_vol = self.config.get("min_vol", 0.01)
+        self.max_vol = self.config.get("max_vol", 3.0)
+        self.local_vol_surface: Optional[np.ndarray] = None
+        self.strike_grid: Optional[np.ndarray] = None
+        self.time_grid: Optional[np.ndarray] = None
+        self.implied_surface: Optional[VolatilitySurface] = None
+        self._interpolator: Optional[RegularGridInterpolator] = None
+        self.spot: Optional[float] = None
 
     def calibrate(
-        self, option_data: Any, spot: Any, rate: Any, dividend: Any = 0
-    ) -> Any:
-        """
-        Calibrate local volatility surface from market option prices.
-
-        Args:
-            option_data (list): List of option data dictionaries
-                Each dictionary should contain:
-                - strike: Strike price
-                - expiry: Expiry date or time to expiry in years
-                - price: Option price
-                - option_type: Option type ('call' or 'put')
-            spot (float): Current spot price
-            rate (float): Risk-free interest rate
-            dividend (float): Dividend yield
-
-        Returns:
-            tuple: (local_vol_surface, strike_grid, time_grid)
-        """
-        strikes = sorted(list(set([option["strike"] for option in option_data])))
-        expiries = []
+        self,
+        option_data: List[Dict[str, Any]],
+        spot: float,
+        rate: float,
+        dividend: float = 0.0,
+        surface_method: str = "svi",
+        grid_strikes: int = 61,
+        grid_times: int = 40,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        if spot <= 0:
+            raise ValueError("Spot must be positive")
+        quotes = []
         for option in option_data:
-            if isinstance(option["expiry"], str):
-                expiry_date = datetime.strptime(option["expiry"], "%Y-%m-%d")
-                today = datetime.now()
-                time_to_expiry = (expiry_date - today).days / 365.0
-                expiries.append(time_to_expiry)
+            T = _expiry_to_years(option["expiry"])
+            if T <= 0:
+                continue
+            option_type = option.get("option_type", "call")
+            if "implied_volatility" in option or "iv" in option:
+                iv = float(option.get("implied_volatility", option.get("iv")))
             else:
-                expiries.append(option["expiry"])
-        expiries = sorted(list(set(expiries)))
-        if len(strikes) < 4:
-            min_strike = min(strikes)
-            max_strike = max(strikes)
-            step = (max_strike - min_strike) / 10
-            strikes = list(np.linspace(min_strike - step, max_strike + step, 12))
-        if len(expiries) < 4:
-            min_expiry = min(expiries)
-            max_expiry = max(expiries)
-            if max_expiry <= min_expiry:
-                max_expiry = min_expiry + 1.0
-            expiries = list(
-                np.linspace(max(0.01, min_expiry - 0.1), max_expiry + 0.1, 12)
-            )
-        strike_grid = np.array(strikes)
-        time_grid = np.array(expiries)
-        implied_vol_surface = np.zeros((len(time_grid), len(strike_grid)))
-        for i, t in enumerate(time_grid):
-            for j, k in enumerate(strike_grid):
-                matching_options = [
-                    opt
-                    for opt in option_data
-                    if opt["strike"] == k
-                    and (
-                        isinstance(opt["expiry"], str)
-                        and (
-                            datetime.strptime(opt["expiry"], "%Y-%m-%d")
-                            - datetime.now()
-                        ).days
-                        / 365.0
-                        == t
-                        or opt["expiry"] == t
-                    )
-                ]
-                if matching_options:
-                    option = matching_options[0]
-                    implied_vol = self._calculate_implied_volatility(
-                        option["price"],
+                try:
+                    iv = implied_volatility_from_price(
+                        float(option["price"]),
                         spot,
-                        k,
-                        t,
+                        float(option["strike"]),
+                        T,
                         rate,
                         dividend,
-                        option["option_type"],
+                        option_type,
                     )
-                    implied_vol_surface[i, j] = implied_vol
-                else:
-                    atm_factor = np.exp(-0.5 * ((k - spot) / spot) ** 2)
-                    term_factor = np.sqrt(1 + t)
-                    implied_vol_surface[i, j] = 0.2 * atm_factor * term_factor
-        local_vol_surface = 0.9 * implied_vol_surface
-        self.local_vol_surface = local_vol_surface
+                except ValueError:
+                    continue
+            quotes.append(OptionData(float(option["strike"]), T, iv, option_type))
+        if len(quotes) < 3:
+            raise ValueError("At least three usable option quotes are required")
+        surface = VolatilitySurface(
+            {
+                "method": surface_method,
+                "min_volatility": 1e-3,
+                "max_volatility": 5.0,
+                "min_time_to_expiry": 1e-4,
+                "max_time_to_expiry": 30.0,
+            }
+        )
+        surface.fit_surface(quotes, spot, rate, dividend)
+        expiries = np.array(sorted({q.expiry for q in quotes}))
+        strikes_quoted = np.array([q.strike for q in quotes])
+        strike_grid = np.linspace(
+            0.5 * strikes_quoted.min() if strikes_quoted.min() > 0 else 1.0,
+            1.5 * strikes_quoted.max(),
+            grid_strikes,
+        )
+        strike_grid = np.unique(np.clip(strike_grid, 1e-6, None))
+        t_min = max(float(expiries.min()) * 0.5, 1e-3)
+        time_grid = np.linspace(t_min, float(expiries.max()), grid_times)
+        local = self._dupire_grid(surface, strike_grid, time_grid, spot, rate, dividend)
+        self.implied_surface = surface
+        self.local_vol_surface = local
         self.strike_grid = strike_grid
         self.time_grid = time_grid
-        return (local_vol_surface, strike_grid, time_grid)
-
-    def _calculate_implied_volatility(
-        self,
-        price: Any,
-        spot: Any,
-        strike: Any,
-        time_to_expiry: Any,
-        rate: Any,
-        dividend: Any,
-        option_type: Any,
-    ) -> Any:
-        """
-        Calculate implied volatility using the Black-Scholes formula.
-
-        Args:
-            price (float): Option price
-            spot (float): Spot price
-            strike (float): Strike price
-            time_to_expiry (float): Time to expiry in years
-            rate (float): Risk-free interest rate
-            dividend (float): Dividend yield
-            option_type (str): Option type ('call' or 'put')
-
-        Returns:
-            float: Implied volatility
-        """
-
-        def objective(sigma):
-            d1 = (
-                np.log(spot / strike)
-                + (rate - dividend + 0.5 * sigma**2) * time_to_expiry
-            ) / (sigma * np.sqrt(time_to_expiry))
-            d2 = d1 - sigma * np.sqrt(time_to_expiry)
-            if option_type.lower() == "call":
-                bs_price = spot * np.exp(-dividend * time_to_expiry) * stats.norm.cdf(
-                    d1
-                ) - strike * np.exp(-rate * time_to_expiry) * stats.norm.cdf(d2)
-            else:
-                bs_price = strike * np.exp(-rate * time_to_expiry) * stats.norm.cdf(
-                    -d2
-                ) - spot * np.exp(-dividend * time_to_expiry) * stats.norm.cdf(-d1)
-            return (bs_price - price) ** 2
-
-        initial_sigma = 0.2
-        bounds = [(0.001, 2.0)]
-        result = minimize(
-            objective,
-            [initial_sigma],
-            method="L-BFGS-B",
-            bounds=bounds,
-            options={"ftol": 1e-08},
+        self.spot = spot
+        self._interpolator = RegularGridInterpolator(
+            (time_grid, strike_grid),
+            local,
+            method="linear",
+            bounds_error=False,
+            fill_value=None,
         )
-        return result.x[0]
+        return local, strike_grid, time_grid
+
+    def _dupire_grid(
+        self,
+        surface: VolatilitySurface,
+        strikes: np.ndarray,
+        times: np.ndarray,
+        spot: float,
+        rate: float,
+        dividend: float,
+    ) -> np.ndarray:
+        local = np.empty((times.size, strikes.size))
+        dt = np.minimum(0.01, 0.25 * times)
+        for i, t in enumerate(times):
+            forward = spot * np.exp((rate - dividend) * t)
+            y = np.log(strikes / forward)
+            h = max(float(np.median(np.diff(y))) * 0.5, 1e-3)
+
+            def w_at(yy: np.ndarray, tt: float) -> np.ndarray:
+                f = spot * np.exp((rate - dividend) * tt)
+                return surface.total_variance(f * np.exp(yy), np.full_like(yy, tt))
+
+            w = w_at(y, t)
+            w_up = w_at(y + h, t)
+            w_down = w_at(y - h, t)
+            dw_dy = (w_up - w_down) / (2.0 * h)
+            d2w_dy2 = (w_up - 2.0 * w + w_down) / h**2
+            t_lo = max(t - dt[i], 1e-4)
+            t_hi = t + dt[i]
+            dw_dt = (w_at(y, t_hi) - w_at(y, t_lo)) / (t_hi - t_lo)
+            w_safe = np.maximum(w, 1e-8)
+            denominator = (
+                (1.0 - y * dw_dy / (2.0 * w_safe)) ** 2
+                - dw_dy**2 / 4.0 * (1.0 / w_safe + 0.25)
+                + d2w_dy2 / 2.0
+            )
+            with np.errstate(divide="ignore", invalid="ignore"):
+                variance = dw_dt / denominator
+            fallback = w_safe / t
+            variance = np.where(
+                np.isfinite(variance) & (denominator > 1e-6) & (variance > 0),
+                variance,
+                fallback,
+            )
+            local[i] = np.clip(np.sqrt(variance), self.min_vol, self.max_vol)
+        return local
 
     def local_volatility(self, spot: Any, strike: Any, time_to_expiry: Any) -> Any:
-        """
-        Get local volatility for a specific spot, strike, and time to expiry.
-
-        Args:
-            spot (float): Spot price (not used directly, but included for API consistency)
-            strike (float): Strike price
-            time_to_expiry (float): Time to expiry in years
-
-        Returns:
-            float: Local volatility
-        """
-        if self.local_vol_surface is None:
-            logger.warning(
-                "Local volatility surface not calibrated, using default value"
-            )
+        if self._interpolator is None:
             return self.default_vol
-        if time_to_expiry < np.min(self.time_grid):
-            time_to_expiry = np.min(self.time_grid)
-        if time_to_expiry > np.max(self.time_grid):
-            time_to_expiry = np.max(self.time_grid)
-        if strike < np.min(self.strike_grid):
-            strike = np.min(self.strike_grid)
-        if strike > np.max(self.strike_grid):
-            strike = np.max(self.strike_grid)
-        i_time = np.searchsorted(self.time_grid, time_to_expiry)
-        if i_time == 0:
-            i_time = 1
-        elif i_time == len(self.time_grid):
-            i_time = len(self.time_grid) - 1
-        i_strike = np.searchsorted(self.strike_grid, strike)
-        if i_strike == 0:
-            i_strike = 1
-        elif i_strike == len(self.strike_grid):
-            i_strike = len(self.strike_grid) - 1
-        t1, t2 = (self.time_grid[i_time - 1], self.time_grid[i_time])
-        k1, k2 = (self.strike_grid[i_strike - 1], self.strike_grid[i_strike])
-        v11 = self.local_vol_surface[i_time - 1, i_strike - 1]
-        v12 = self.local_vol_surface[i_time - 1, i_strike]
-        v21 = self.local_vol_surface[i_time, i_strike - 1]
-        v22 = self.local_vol_surface[i_time, i_strike]
-        dt = (time_to_expiry - t1) / (t2 - t1)
-        dk = (strike - k1) / (k2 - k1)
-        v1 = v11 * (1 - dk) + v12 * dk
-        v2 = v21 * (1 - dk) + v22 * dk
-        local_vol = v1 * (1 - dt) + v2 * dt
-        return local_vol
+        K = np.atleast_1d(np.asarray(strike, dtype=float))
+        T = np.atleast_1d(np.asarray(time_to_expiry, dtype=float))
+        K, T = np.broadcast_arrays(K, T)
+        K = np.clip(K, self.strike_grid[0], self.strike_grid[-1])
+        T = np.clip(T, self.time_grid[0], self.time_grid[-1])
+        values = self._interpolator(np.column_stack([T.reshape(-1), K.reshape(-1)]))
+        values = np.clip(values, self.min_vol, self.max_vol).reshape(K.shape)
+        if np.ndim(strike) == 0 and np.ndim(time_to_expiry) == 0:
+            return float(values[0])
+        return values
 
     def price_option(
         self,
-        spot: Any,
-        strike: Any,
-        time_to_expiry: Any,
-        rate: Any,
-        dividend: Any,
-        option_type: Any = "call",
-        num_paths: Any = 10000,
-        num_steps: Any = 100,
-    ) -> Any:
-        """
-        Price an option using Monte Carlo simulation with local volatility.
-
-        Args:
-            spot (float): Spot price
-            strike (float): Strike price
-            time_to_expiry (float): Time to expiry in years
-            rate (float): Risk-free interest rate
-            dividend (float): Dividend yield
-            option_type (str): Option type ('call' or 'put')
-            num_paths (int): Number of Monte Carlo paths
-            num_steps (int): Number of time steps
-
-        Returns:
-            float: Option price
-        """
+        spot: float,
+        strike: float,
+        time_to_expiry: float,
+        rate: float,
+        dividend: float = 0.0,
+        option_type: str = "call",
+        num_paths: int = 20000,
+        num_steps: int = 100,
+        seed: Optional[int] = None,
+    ) -> float:
+        if num_paths * num_steps > 40_000_000:
+            raise ValueError("Simulation size exceeds the supported limit")
+        rng = np.random.default_rng(seed)
         dt = time_to_expiry / num_steps
-        paths = np.zeros((num_paths, num_steps + 1))
-        paths[:, 0] = spot
+        log_s = np.full(num_paths, np.log(spot))
         for i in range(num_steps):
-            t = i * dt
-            local_vols = np.array(
-                [self.local_volatility(spot, paths[j, i], t) for j in range(num_paths)]
+            t = max(i * dt, 1e-6)
+            vols = np.asarray(
+                self.local_volatility(spot, np.exp(log_s), np.full(num_paths, t))
             )
-            z = np.random.normal(0, 1, num_paths)
-            paths[:, i + 1] = paths[:, i] * np.exp(
-                (rate - dividend - 0.5 * local_vols**2) * dt
-                + local_vols * np.sqrt(dt) * z
+            z = rng.standard_normal(num_paths)
+            log_s = (
+                log_s + (rate - dividend - 0.5 * vols**2) * dt + vols * np.sqrt(dt) * z
             )
+        terminal = np.exp(log_s)
         if option_type.lower() == "call":
-            payoffs = np.maximum(paths[:, -1] - strike, 0)
+            payoffs = np.maximum(terminal - strike, 0.0)
         else:
-            payoffs = np.maximum(strike - paths[:, -1], 0)
-        option_price = np.exp(-rate * time_to_expiry) * np.mean(payoffs)
-        return option_price
+            payoffs = np.maximum(strike - terminal, 0.0)
+        return float(np.exp(-rate * time_to_expiry) * np.mean(payoffs))
 
-    def plot_local_volatility_surface(self, title: Any = None) -> Any:
-        """
-        Plot the local volatility surface.
+    def surface_summary(self) -> Dict[str, Any]:
+        if self.local_vol_surface is None:
+            raise ValueError("Local volatility surface not calibrated")
+        return {
+            "strikes": self.strike_grid.tolist(),
+            "times": self.time_grid.tolist(),
+            "local_volatility": self.local_vol_surface.tolist(),
+        }
 
-        Args:
-            title (str, optional): Plot title
+    def plot_local_volatility_surface(self, title: Optional[str] = None) -> Any:
+        import matplotlib.pyplot as plt
 
-        Returns:
-            matplotlib.figure.Figure: Figure object
-        """
         if self.local_vol_surface is None:
             raise ValueError("Local volatility surface not calibrated")
         X, Y = np.meshgrid(self.strike_grid, self.time_grid)
         fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111, projection="3d")
-        surf = ax.plot_surface(X, Y, self.local_vol_surface, cmap="viridis", alpha=0.8)
-        fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
+        ax.plot_surface(X, Y, self.local_vol_surface, cmap="viridis", alpha=0.8)
         ax.set_xlabel("Strike")
-        ax.set_ylabel("Time to Expiry")
-        ax.set_zlabel("Local Volatility")
-        if title:
-            ax.set_title(title)
-        else:
-            ax.set_title("Local Volatility Surface")
-        return fig
-
-    def plot_volatility_smile(self, time_to_expiry: Any, title: Any = None) -> Any:
-        """
-        Plot the volatility smile for a specific time to expiry.
-
-        Args:
-            time_to_expiry (float): Time to expiry in years
-            title (str, optional): Plot title
-
-        Returns:
-            matplotlib.figure.Figure: Figure object
-        """
-        if self.local_vol_surface is None:
-            raise ValueError("Local volatility surface not calibrated")
-        time_idx = np.abs(self.time_grid - time_to_expiry).argmin()
-        actual_time = self.time_grid[time_idx]
-        vol_smile = self.local_vol_surface[time_idx, :]
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(self.strike_grid, vol_smile, "b-", linewidth=2)
-        ax.set_xlabel("Strike")
-        ax.set_ylabel("Local Volatility")
-        if title:
-            ax.set_title(title)
-        else:
-            ax.set_title(f"Local Volatility Smile (T={actual_time:.2f})")
-        ax.grid(True)
+        ax.set_ylabel("Time to expiry")
+        ax.set_zlabel("Local volatility")
+        ax.set_title(title or "Local volatility surface")
         return fig
 
 
 class CEVModel:
-    """
-    Implementation of the Constant Elasticity of Variance (CEV) model.
+    def __init__(self, params: Optional[Dict[str, float]] = None) -> None:
+        self.params = dict(params or {"sigma": 0.2, "beta": 0.5})
+        self._validate(self.params)
 
-    The CEV model extends the Black-Scholes model by allowing the volatility
-    to depend on the asset price, capturing the leverage effect.
-    """
+    @staticmethod
+    def _validate(params: Dict[str, float]) -> None:
+        if params["sigma"] <= 0:
+            raise ValueError("sigma must be positive")
+        if not 0.0 < params["beta"] <= 1.0:
+            raise ValueError("beta must be in (0, 1]")
 
-    def __init__(self, params: Any = None) -> None:
-        """
-        Initialize CEV model with parameters.
-
-        Args:
-            params (dict, optional): Model parameters
-                - sigma: Volatility parameter
-                - beta: Elasticity parameter (0 <= beta <= 1)
-        """
-        self.params = params or {"sigma": 0.2, "beta": 0.5}
-
-    def local_volatility(self, spot: Any, strike: Any, time_to_expiry: Any) -> Any:
-        """
-        Calculate local volatility under the CEV model.
-
-        Args:
-            spot (float): Spot price
-            strike (float): Strike price (not used in CEV, included for API consistency)
-            time_to_expiry (float): Time to expiry in years (not used in CEV, included for API consistency)
-
-        Returns:
-            float: Local volatility
-        """
-        sigma = self.params["sigma"]
-        beta = self.params["beta"]
-        local_vol = sigma * spot ** (beta - 1)
-        return local_vol
+    def local_volatility(
+        self, spot: Any, strike: Any = None, time_to_expiry: Any = None
+    ) -> Any:
+        return self.params["sigma"] * np.asarray(spot, dtype=float) ** (
+            self.params["beta"] - 1.0
+        )
 
     def price_option(
         self,
-        spot: Any,
-        strike: Any,
-        time_to_expiry: Any,
-        rate: Any,
-        dividend: Any,
-        option_type: Any = "call",
-        method: Any = "monte_carlo",
-        num_paths: Any = 10000,
-        num_steps: Any = 100,
-    ) -> Any:
-        """
-        Price an option using the CEV model.
-
-        Args:
-            spot (float): Spot price
-            strike (float): Strike price
-            time_to_expiry (float): Time to expiry in years
-            rate (float): Risk-free interest rate
-            dividend (float): Dividend yield
-            option_type (str): Option type ('call' or 'put')
-            method (str): Pricing method ('monte_carlo' or 'analytical')
-            num_paths (int): Number of Monte Carlo paths
-            num_steps (int): Number of time steps
-
-        Returns:
-            float: Option price
-        """
+        spot: float,
+        strike: float,
+        time_to_expiry: float,
+        rate: float,
+        dividend: float = 0.0,
+        option_type: str = "call",
+        method: str = "analytical",
+        num_paths: int = 20000,
+        num_steps: int = 100,
+        seed: Optional[int] = None,
+    ) -> float:
         if method == "monte_carlo":
             return self._price_monte_carlo(
                 spot,
@@ -404,200 +265,153 @@ class CEVModel:
                 option_type,
                 num_paths,
                 num_steps,
+                seed,
             )
-        elif method == "analytical":
+        if method in ("analytical", "analytic"):
             return self._price_analytical(
                 spot, strike, time_to_expiry, rate, dividend, option_type
             )
-        else:
-            raise ValueError(f"Unknown pricing method: {method}")
+        raise ValueError(f"Unknown pricing method: {method}")
 
     def _price_monte_carlo(
         self,
-        spot: Any,
-        strike: Any,
-        time_to_expiry: Any,
-        rate: Any,
-        dividend: Any,
-        option_type: Any,
-        num_paths: Any,
-        num_steps: Any,
-    ) -> Any:
-        """
-        Price an option using Monte Carlo simulation.
-
-        Args:
-            spot (float): Spot price
-            strike (float): Strike price
-            time_to_expiry (float): Time to expiry in years
-            rate (float): Risk-free interest rate
-            dividend (float): Dividend yield
-            option_type (str): Option type ('call' or 'put')
-            num_paths (int): Number of Monte Carlo paths
-            num_steps (int): Number of time steps
-
-        Returns:
-            float: Option price
-        """
-        sigma = self.params["sigma"]
-        beta = self.params["beta"]
+        spot: float,
+        strike: float,
+        time_to_expiry: float,
+        rate: float,
+        dividend: float,
+        option_type: str,
+        num_paths: int,
+        num_steps: int,
+        seed: Optional[int],
+    ) -> float:
+        sigma, beta = self.params["sigma"], self.params["beta"]
+        rng = np.random.default_rng(seed)
         dt = time_to_expiry / num_steps
-        paths = np.zeros((num_paths, num_steps + 1))
-        paths[:, 0] = spot
-        for i in range(num_steps):
-            local_vols = sigma * paths[:, i] ** (beta - 1)
-            z = np.random.normal(0, 1, num_paths)
-            paths[:, i + 1] = paths[:, i] * np.exp(
-                (
-                    rate
-                    - dividend
-                    - 0.5 * local_vols**2 * paths[:, i] ** (2 * (beta - 1))
-                )
-                * dt
-                + local_vols * paths[:, i] ** (beta - 1) * np.sqrt(dt) * z
+        s = np.full(num_paths, float(spot))
+        for _ in range(num_steps):
+            safe = np.maximum(s, 1e-8)
+            vol = sigma * safe ** (beta - 1.0)
+            z = rng.standard_normal(num_paths)
+            s = safe * np.exp(
+                (rate - dividend - 0.5 * vol**2) * dt + vol * np.sqrt(dt) * z
             )
         if option_type.lower() == "call":
-            payoffs = np.maximum(paths[:, -1] - strike, 0)
+            payoffs = np.maximum(s - strike, 0.0)
         else:
-            payoffs = np.maximum(strike - paths[:, -1], 0)
-        option_price = np.exp(-rate * time_to_expiry) * np.mean(payoffs)
-        return option_price
+            payoffs = np.maximum(strike - s, 0.0)
+        return float(np.exp(-rate * time_to_expiry) * np.mean(payoffs))
 
     def _price_analytical(
         self,
-        spot: Any,
-        strike: Any,
-        time_to_expiry: Any,
-        rate: Any,
-        dividend: Any,
-        option_type: Any,
-    ) -> Any:
-        """
-        Price an option using analytical approximation.
-
-        Args:
-            spot (float): Spot price
-            strike (float): Strike price
-            time_to_expiry (float): Time to expiry in years
-            rate (float): Risk-free interest rate
-            dividend (float): Dividend yield
-            option_type (str): Option type ('call' or 'put')
-
-        Returns:
-            float: Option price
-        """
-        sigma = self.params["sigma"]
-        beta = self.params["beta"]
-        if abs(beta - 1) < 1e-06:
-            d1 = (
-                np.log(spot / strike)
-                + (rate - dividend + 0.5 * sigma**2) * time_to_expiry
-            ) / (sigma * np.sqrt(time_to_expiry))
-            d2 = d1 - sigma * np.sqrt(time_to_expiry)
-            if option_type.lower() == "call":
-                price = spot * np.exp(-dividend * time_to_expiry) * stats.norm.cdf(
-                    d1
-                ) - strike * np.exp(-rate * time_to_expiry) * stats.norm.cdf(d2)
-            else:
-                price = strike * np.exp(-rate * time_to_expiry) * stats.norm.cdf(
-                    -d2
-                ) - spot * np.exp(-dividend * time_to_expiry) * stats.norm.cdf(-d1)
-            return price
-        effective_vol = sigma * spot ** (beta - 1)
-        d1 = (
-            np.log(spot / strike)
-            + (rate - dividend + 0.5 * effective_vol**2) * time_to_expiry
-        ) / (effective_vol * np.sqrt(time_to_expiry))
-        d2 = d1 - effective_vol * np.sqrt(time_to_expiry)
-        if option_type.lower() == "call":
-            price = spot * np.exp(-dividend * time_to_expiry) * stats.norm.cdf(
-                d1
-            ) - strike * np.exp(-rate * time_to_expiry) * stats.norm.cdf(d2)
+        spot: float,
+        strike: float,
+        time_to_expiry: float,
+        rate: float,
+        dividend: float,
+        option_type: str,
+    ) -> float:
+        sigma, beta = self.params["sigma"], self.params["beta"]
+        T = time_to_expiry
+        if T <= 0:
+            return float(
+                max(spot - strike, 0.0)
+                if option_type.lower() == "call"
+                else max(strike - spot, 0.0)
+            )
+        if abs(beta - 1.0) < 1e-9:
+            return float(bs_price(spot, strike, T, rate, sigma, dividend, option_type))
+        b = rate - dividend
+        power = 2.0 - 2.0 * beta
+        if abs(b) < 1e-12:
+            kappa = 2.0 / (sigma**2 * power**2 * T)
         else:
-            price = strike * np.exp(-rate * time_to_expiry) * stats.norm.cdf(
-                -d2
-            ) - spot * np.exp(-dividend * time_to_expiry) * stats.norm.cdf(-d1)
-        correction = 1 - 0.1 * (1 - beta) * time_to_expiry
-        return price * correction
+            kappa = 2.0 * b / (sigma**2 * power * (np.exp(b * power * T) - 1.0))
+        x = kappa * spot**power * np.exp(b * power * T)
+        y = kappa * strike**power
+        shape = 1.0 / power
+        call = spot * np.exp(-dividend * T) * (
+            1.0 - ncx2.cdf(2.0 * y, 2.0 + 2.0 * shape, 2.0 * x)
+        ) - strike * np.exp(-rate * T) * ncx2.cdf(2.0 * x, 2.0 * shape, 2.0 * y)
+        if option_type.lower() == "call":
+            return float(max(call, 0.0))
+        put = call - spot * np.exp(-dividend * T) + strike * np.exp(-rate * T)
+        return float(max(put, 0.0))
 
     def calibrate(
         self,
-        option_data: Any,
-        spot: Any,
-        rate: Any,
-        dividend: Any = 0,
-        method: Any = "SLSQP",
-    ) -> Any:
-        """
-        Calibrate CEV model parameters to market data.
+        option_data: List[Dict[str, Any]],
+        spot: float,
+        rate: float,
+        dividend: float = 0.0,
+        fix_beta: bool = False,
+    ) -> Dict[str, float]:
+        if len(option_data) < (1 if fix_beta else 2):
+            raise ValueError("Insufficient option quotes for CEV calibration")
+        beta0 = self.params["beta"]
 
-        Args:
-            option_data (list): List of option data dictionaries
-                Each dictionary should contain:
-                - strike: Strike price
-                - expiry: Time to expiry in years
-                - price: Option price
-                - option_type: Option type ('call' or 'put')
-            spot (float): Spot price
-            rate (float): Risk-free interest rate
-            dividend (float): Dividend yield
-            method (str): Optimization method
+        def unpack(vector: np.ndarray) -> Dict[str, float]:
+            return {
+                "sigma": float(vector[0]),
+                "beta": beta0 if fix_beta else float(vector[1]),
+            }
 
-        Returns:
-            dict: Calibrated parameters
-        """
-
-        def objective(params):
-            self.params = {"sigma": params[0], "beta": params[1]}
-            sse = 0
-            for option in option_data:
-                model_price = self.price_option(
-                    spot,
-                    option["strike"],
-                    option["expiry"],
-                    rate,
-                    dividend,
-                    option["option_type"],
-                    method="analytical",
+        def residuals(vector: np.ndarray) -> np.ndarray:
+            trial = CEVModel(unpack(vector))
+            return (
+                np.array(
+                    [
+                        trial._price_analytical(
+                            spot,
+                            o["strike"],
+                            _expiry_to_years(o["expiry"]),
+                            rate,
+                            dividend,
+                            o.get("option_type", "call"),
+                        )
+                        - o["price"]
+                        for o in option_data
+                    ]
                 )
-                sse += (model_price - option["price"]) ** 2
-            return sse
+                / spot
+            )
 
-        initial_params = [self.params["sigma"], self.params["beta"]]
-        bounds = [(0.01, 1.0), (0.01, 1.0)]
-        result = minimize(
-            objective,
-            initial_params,
-            method=method,
-            bounds=bounds,
-            options={"maxiter": 100},
+        atm = min(option_data, key=lambda o: abs(o["strike"] - spot))
+        try:
+            iv0 = implied_volatility_from_price(
+                atm["price"],
+                spot,
+                atm["strike"],
+                _expiry_to_years(atm["expiry"]),
+                rate,
+                dividend,
+                atm.get("option_type", "call"),
+            )
+        except ValueError:
+            iv0 = 0.2
+        start = [iv0 * spot ** (1.0 - beta0)] + ([] if fix_beta else [beta0])
+        lower = [1e-6] + ([] if fix_beta else [0.05])
+        upper = [1e3] + ([] if fix_beta else [1.0])
+        solution = least_squares(
+            residuals, start, bounds=(lower, upper), x_scale="jac", max_nfev=300
         )
-        self.params = {"sigma": result.x[0], "beta": result.x[1]}
-        return self.params
+        self.params = unpack(solution.x)
+        return dict(self.params)
 
     def plot_volatility_smile(
-        self, spot: Any, strikes: Any, time_to_expiry: Any, title: Any = None
+        self,
+        spot: float,
+        strikes: Any,
+        time_to_expiry: float,
+        title: Optional[str] = None,
     ) -> Any:
-        """
-        Plot the volatility smile for a given spot and time to expiry.
+        import matplotlib.pyplot as plt
 
-        Args:
-            spot (float): Spot price
-            strikes (array): Array of strike prices
-            time_to_expiry (float): Time to expiry in years
-            title (str, optional): Plot title
-
-        Returns:
-            matplotlib.figure.Figure: Figure object
-        """
-        local_vols = [self.local_volatility(spot, K, time_to_expiry) for K in strikes]
+        vols = self.local_volatility(np.asarray(strikes, dtype=float))
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(strikes, local_vols, "b-", linewidth=2)
+        ax.plot(strikes, vols, linewidth=2)
         ax.set_xlabel("Strike")
-        ax.set_ylabel("Local Volatility")
-        if title:
-            ax.set_title(title)
-        else:
-            ax.set_title(f"CEV Volatility Smile (S={spot}, T={time_to_expiry})")
+        ax.set_ylabel("Local volatility")
+        ax.set_title(title or f"CEV local volatility (S={spot}, T={time_to_expiry})")
         ax.grid(True)
         return fig
