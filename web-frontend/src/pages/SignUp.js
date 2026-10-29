@@ -50,7 +50,11 @@ const PASSWORD_RULES = [
   { test: (p) => /[a-z]/.test(p), label: "One lowercase letter" },
   { test: (p) => /[A-Z]/.test(p), label: "One uppercase letter" },
   { test: (p) => /[0-9]/.test(p), label: "One number" },
-  { test: (p) => /[^A-Za-z0-9]/.test(p), label: "One special character" },
+  // Same character set as the backend's validate_password_strength.
+  {
+    test: (p) => /[!@#$%^&*(),.?":{}|<>]/.test(p),
+    label: "One special character",
+  },
   {
     test: (p) => p.length > 0 && !hasSequentialPattern(p),
     label: "No repeated or sequential characters",
@@ -84,8 +88,11 @@ const SignUp = () => {
   const validate = () => {
     const next = {};
     if (!form.fullName.trim()) next.fullName = "Full name is required.";
-    else if (!/^[a-zA-Z\s'-]{2,100}$/.test(form.fullName.trim()))
-      next.fullName = "Use letters, spaces, hyphens or apostrophes only.";
+    // Mirrors the backend: Unicode letters plus spaces, hyphens,
+    // apostrophes and periods.
+    else if (!/^[\p{L} '.-]{2,255}$/u.test(form.fullName.trim()))
+      next.fullName =
+        "Use letters, spaces, hyphens, apostrophes or periods only.";
     if (!form.email.trim()) next.email = "Email is required.";
     if (passedRules.length < PASSWORD_RULES.length)
       next.password = "Password doesn't meet all requirements.";

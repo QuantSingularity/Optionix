@@ -210,7 +210,7 @@ const Settings = () => {
                 {accounts.map((a) => (
                   <tr key={a.account_id}>
                     <td style={{ fontSize: 12 }}>
-                      {a.account_id.slice(0, 8)}…
+                      {String(a.account_id ?? "").slice(0, 8)}…
                     </td>
                     <td style={{ textTransform: "capitalize" }}>
                       {a.account_type}

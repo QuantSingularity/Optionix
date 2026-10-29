@@ -143,7 +143,7 @@ const SettingsScreen = () => {
               <View style={{ flex: 1 }}>
                 <Text style={styles.accountType}>{a.account_type}</Text>
                 <Text style={styles.accountId}>
-                  {a.account_id.slice(0, 12)}…
+                  {String(a.account_id ?? "").slice(0, 12)}…
                 </Text>
               </View>
               <Text style={styles.accountBalance}>

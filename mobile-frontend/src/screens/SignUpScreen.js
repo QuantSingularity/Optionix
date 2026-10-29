@@ -29,7 +29,11 @@ const PASSWORD_RULES = [
   { test: (p) => /[a-z]/.test(p), label: "One lowercase letter" },
   { test: (p) => /[A-Z]/.test(p), label: "One uppercase letter" },
   { test: (p) => /[0-9]/.test(p), label: "One number" },
-  { test: (p) => /[^A-Za-z0-9]/.test(p), label: "One special character" },
+  // Same character set as the backend's validate_password_strength.
+  {
+    test: (p) => /[!@#$%^&*(),.?":{}|<>]/.test(p),
+    label: "One special character",
+  },
   {
     test: (p) => p.length > 0 && !hasSequentialPattern(p),
     label: "No repeated or sequential characters",

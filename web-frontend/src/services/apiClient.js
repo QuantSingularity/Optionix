@@ -56,10 +56,18 @@ apiClient.interceptors.response.use(
       originalRequest?.url?.includes("/auth/register") ||
       originalRequest?.url?.includes("/auth/refresh");
 
-    if (status === 401 && !originalRequest._retry && !isAuthRoute) {
+    if (
+      status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !isAuthRoute
+    ) {
       const refreshToken = tokenStorage.getRefreshToken();
       if (!refreshToken) {
+        // Nothing to refresh with: end the session, and tell the app so the
+        // UI does not keep showing a signed-in user whose requests all fail.
         tokenStorage.clear();
+        window.dispatchEvent(new CustomEvent("optionix:session-expired"));
         return Promise.reject(error);
       }
 

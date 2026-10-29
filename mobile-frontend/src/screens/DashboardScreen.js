@@ -214,8 +214,8 @@ const DashboardScreen = ({ navigation }) => {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.orderSymbol}>{o.symbol}</Text>
                     <Text style={styles.orderMeta}>
-                      {o.trade_type.toUpperCase()} · {o.quantity} ·{" "}
-                      {formatDateTime(o.created_at)}
+                      {String(o.trade_type ?? "").toUpperCase()} · {o.quantity}{" "}
+                      · {formatDateTime(o.created_at)}
                     </Text>
                   </View>
                   <Badge tone={STATUS_TONE[o.status] || "neutral"}>

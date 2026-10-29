@@ -75,7 +75,12 @@ apiClient.interceptors.response.use(
       originalRequest?.url?.includes("/auth/register") ||
       originalRequest?.url?.includes("/auth/refresh");
 
-    if (statusCode === 401 && !originalRequest._retry && !isAuthRoute) {
+    if (
+      statusCode === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !isAuthRoute
+    ) {
       const refreshToken = await tokenStorage.getRefreshToken();
       if (!refreshToken) {
         await tokenStorage.clear();

@@ -241,7 +241,7 @@ const Compliance = () => {
                   {sanctionsResult.matches_found
                     ? "Potential matches found. Review required."
                     : "No matches found across all screened lists."}{" "}
-                  Checked: {sanctionsResult.lists_checked.join(", ")}.
+                  Checked: {(sanctionsResult.lists_checked || []).join(", ")}.
                 </Alert>
               )}
             </Card>

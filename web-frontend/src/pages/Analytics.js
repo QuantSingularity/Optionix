@@ -36,6 +36,16 @@ const TABS = [
   { key: "forecast", label: "Vol Forecast", icon: <FiCpu /> },
 ];
 
+// "170, 180,,190," -> [170, 180, 190]. Empty entries must be dropped before
+// conversion because Number("") is 0, which would add a bogus strike/expiry.
+export const parseNumberList = (text) =>
+  String(text)
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s !== "")
+    .map(Number)
+    .filter((n) => Number.isFinite(n));
+
 const ResultGrid = ({ items }) => (
   <Grid $cols={3} $gap="14px">
     {items.map(([label, value]) => (
@@ -451,14 +461,8 @@ const VolatilitySurface = () => {
     setError("");
     setLoading(true);
     try {
-      const strikes = form.strikes
-        .split(",")
-        .map((s) => Number(s.trim()))
-        .filter((n) => !Number.isNaN(n));
-      const expiries = form.expiries
-        .split(",")
-        .map((s) => Number(s.trim()))
-        .filter((n) => !Number.isNaN(n));
+      const strikes = parseNumberList(form.strikes);
+      const expiries = parseNumberList(form.expiries);
       const data = await analyticsService.volatilitySurface({
         spotPrice: Number(form.spotPrice),
         strikes,

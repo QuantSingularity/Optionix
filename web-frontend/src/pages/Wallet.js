@@ -323,7 +323,10 @@ const Wallet = () => {
                       "neutral"
                     }
                   >
-                    {positions.liquidation_risk.replace("_", " ")}
+                    {String(positions.liquidation_risk ?? "none").replace(
+                      "_",
+                      " ",
+                    )}
                   </Badge>
                 ) : (
                   "-"

@@ -323,7 +323,8 @@ const TradingScreen = () => {
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowTitle}>{o.symbol}</Text>
                 <Text style={styles.rowMeta}>
-                  {o.trade_type.toUpperCase()} · {o.order_type} · {o.quantity}
+                  {String(o.trade_type ?? "").toUpperCase()} · {o.order_type} ·{" "}
+                  {o.quantity}
                 </Text>
               </View>
               <Badge tone={STATUS_TONE[o.status] || "neutral"}>

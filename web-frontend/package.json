@@ -18,6 +18,7 @@
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.2.0",
     "react-icons": "^4.8.0",
+    "react-is": "^18.3.1",
     "react-router-dom": "^6.9.0",
     "styled-components": "^5.3.9",
     "web3": "^1.9.0"
@@ -45,10 +46,20 @@
   "jest": {
     "testEnvironment": "jsdom",
     "setupFilesAfterEnv": [
-      "@testing-library/jest-dom"
+      "<rootDir>/jest.setup.js"
     ],
     "moduleNameMapper": {
       "\\.(css|less|scss|sass)$": "identity-obj-proxy"
-    }
+    },
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/src/testUtils/"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/index.js",
+      "!src/testUtils/**",
+      "!src/__tests__/**"
+    ]
   }
 }

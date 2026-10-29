@@ -58,15 +58,20 @@
   "jest": {
     "preset": "react-native",
     "setupFilesAfterEnv": [
+      "@testing-library/react-native/extend-expect",
       "<rootDir>/jest.setup.js"
     ],
     "transformIgnorePatterns": [
       "node_modules/(?!(react-native|@react-native|@react-navigation|react-native-paper|react-native-vector-icons|react-native-svg|react-native-qrcode-svg|@walletconnect|@reown|@walletconnect/.*|uint8arrays|multiformats)/)"
     ],
     "collectCoverageFrom": [
-      "src/**/*.{js,jsx}",
-      "!src/**/*.test.{js,jsx}",
-      "!src/**/__tests__/**"
+      "src/**/*.js",
+      "!src/testUtils/**",
+      "!src/__tests__/**"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/src/testUtils/"
     ]
   }
 }
