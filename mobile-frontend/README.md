@@ -98,12 +98,3 @@ The mobile frontend integrates with:
 2. **Authentication Services**: Handles user authentication and session management
 3. **Push Notification Services**: For delivering alerts and notifications to users
 4. **Market Data Providers**: May directly integrate with market data APIs for real-time information
-
-## Best Practices
-
-1. **Code Organization**: Keep components small and focused on a single responsibility
-2. **State Management**: Use appropriate state management techniques based on complexity
-3. **Performance**: Optimize rendering performance, especially for data-heavy screens
-4. **Testing**: Write tests for critical components and functionality
-5. **Accessibility**: Ensure the app is accessible to users with disabilities
-6. **Cross-Platform**: Test thoroughly on both iOS and Android platforms
