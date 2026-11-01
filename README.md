@@ -32,7 +32,7 @@ Optionix demonstrates an options trading workflow across a real, runnable codeba
 
 ## Project Structure
 
-```
+```text
 Optionix/
 ├── code/
 │   ├── backend/                # FastAPI service: API, auth, services, DB
@@ -102,7 +102,7 @@ Optionix/
 
 ## Architecture
 
-```
+```text
 Clients
   ├── web-frontend (React, plain JS)      ── HTTP/JSON ──┐
   └── mobile-frontend (React Native)      ── HTTP/JSON ──┤

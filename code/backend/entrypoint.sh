@@ -126,7 +126,7 @@ import alembic.command
 import os
 
 try:
-    alembic_cfg = alembic.config.Config(os.path.join(os.getcwd(), "alembic.ini"))
+    alembic_cfg = alembic.config.Config(os.path.join(os.getcwd(), 'alembic.ini'))
     alembic.command.upgrade(alembic_cfg, 'head')
     print('Migrations completed successfully')
     exit(0)

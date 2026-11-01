@@ -15,8 +15,10 @@ fi
 bash scripts/generate_dev_certs.sh
 
 # Set build args
-export BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-export VCS_REF=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+export BUILD_DATE
+VCS_REF=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+export VCS_REF
 export ENVIRONMENT=development
 
 docker compose up --build "$@"

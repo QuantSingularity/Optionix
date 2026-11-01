@@ -31,14 +31,14 @@ Create a new user account.
 
 **Request Body**:
 
-| Name                    | Type     | Required? | Default | Description                  | Example              |
-| ----------------------- | -------- | :-------: | :-----: | ---------------------------- | -------------------- |
-| email                   | EmailStr |    Yes    |    -    | Valid email address          | "trader@example.com" |
-| password                | string   |    Yes    |    -    | Password (min 8 chars)       | "SecurePass123!"     |
-| full_name               | string   |    Yes    |    -    | Full name (2-255 chars)      | "John Trader"        |
-| data_retention_consent  | boolean  |    No     |  false  | Data retention consent       | true                 |
-| marketing_consent       | boolean  |    No     |  false  | Marketing emails consent     | false                |
-| data_processing_consent | boolean  |    No     |  true   | Required for GDPR compliance | true                 |
+| Name                    | Type     | Required? | Default | Description                  | Example                |
+| ----------------------- | -------- | :-------: | :-----: | ---------------------------- | ---------------------- |
+| email                   | EmailStr |    Yes    |    -    | Valid email address          | `"trader@example.com"` |
+| password                | string   |    Yes    |    -    | Password (min 8 chars)       | "SecurePass123!"       |
+| full_name               | string   |    Yes    |    -    | Full name (2-255 chars)      | "John Trader"          |
+| data_retention_consent  | boolean  |    No     |  false  | Data retention consent       | true                   |
+| marketing_consent       | boolean  |    No     |  false  | Marketing emails consent     | false                  |
+| data_processing_consent | boolean  |    No     |  true   | Required for GDPR compliance | true                   |
 
 **Example Request**:
 
@@ -79,12 +79,12 @@ Authenticate and receive access tokens.
 
 **Request Body**:
 
-| Name        | Type     | Required? | Default | Description        | Example              |
-| ----------- | -------- | :-------: | :-----: | ------------------ | -------------------- |
-| email       | EmailStr |    Yes    |    -    | User email address | "trader@example.com" |
-| password    | string   |    Yes    |    -    | User password      | "SecurePass123!"     |
-| mfa_token   | string   |    No     |  null   | 6-digit MFA token  | "123456"             |
-| remember_me | boolean  |    No     |  false  | Extended session   | true                 |
+| Name        | Type     | Required? | Default | Description        | Example                |
+| ----------- | -------- | :-------: | :-----: | ------------------ | ---------------------- |
+| email       | EmailStr |    Yes    |    -    | User email address | `"trader@example.com"` |
+| password    | string   |    Yes    |    -    | User password      | "SecurePass123!"       |
+| mfa_token   | string   |    No     |  null   | 6-digit MFA token  | "123456"               |
+| remember_me | boolean  |    No     |  false  | Extended session   | true                   |
 
 **Example Request**:
 
@@ -731,7 +731,7 @@ API requests are rate-limited per user:
 
 Rate limit headers are included in all responses:
 
-```
+```text
 X-RateLimit-Limit: 100
 X-RateLimit-Remaining: 95
 X-RateLimit-Reset: 1704067200
@@ -750,7 +750,7 @@ List endpoints support pagination:
 
 **Response Headers**:
 
-```
+```text
 X-Total-Count: 250
 X-Page: 1
 X-Page-Size: 50
@@ -797,5 +797,5 @@ Example: `http://localhost:8000/api/v2/options/price`
 ## Next Steps
 
 - [CLI Reference](CLI.md) - Command-line interface
-- [Examples](EXAMPLES/) - Practical examples
+- [Examples](examples/) - Practical examples
 - [Usage Guide](USAGE.md) - Common workflows

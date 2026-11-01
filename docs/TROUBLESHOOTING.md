@@ -79,7 +79,7 @@ npm install
 
 **Symptoms**:
 
-```
+```text
 ImportError: No module named 'fastapi'
 ```
 
@@ -102,7 +102,7 @@ pip install fastapi uvicorn
 
 **Symptoms**:
 
-```
+```text
 sqlalchemy.exc.OperationalError: could not connect to server
 ```
 
@@ -173,7 +173,7 @@ lsof -i :8000
 netstat -tulpn | grep 8000
 
 # Kill process
-kill -9 <PID>
+kill -9 PID  # replace PID with the process ID found above
 
 # Or use different port
 uvicorn backend.app:app --port 8001
@@ -197,7 +197,7 @@ npm install
 
 # Check for port conflicts
 lsof -i :3000
-kill -9 <PID>
+kill -9 PID  # replace PID with the process ID found above
 ```
 
 ### Build Errors
@@ -381,7 +381,9 @@ web3.eth.getBalance(account)
 ```bash
 # Enable query logging
 LOG_LEVEL=DEBUG
+```
 
+```python
 # Profile specific endpoint
 import cProfile
 cProfile.run('my_function()')
@@ -407,7 +409,9 @@ redis_client.setex(key, 300, value)  # 5 min TTL
 # Monitor memory
 pip install memory_profiler
 python -m memory_profiler script.py
+```
 
+```python
 # Reduce batch sizes
 # Instead of loading all data at once
 for batch in query.yield_per(1000):
@@ -525,7 +529,7 @@ npm install
 
 ```bash
 lsof -i :8000
-kill -9 <PID>
+kill -9 PID  # replace PID with the process ID found above
 ```
 
 ### "Permission denied"

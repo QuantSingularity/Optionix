@@ -410,3 +410,532 @@ jobs:
           name: blockchain-contract-abi
           path: code/blockchain/abi/
           retention-days: 30
+
+  # ============================================================
+  # Job 7 -- Docs Validation
+  # ============================================================
+  docs_validation:
+    name: Docs Validation
+    runs-on: ubuntu-latest
+    needs: code_quality
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Lint Markdown (docs/ and root README)
+        run: |
+          set -euo pipefail
+          # Line length is left to Prettier (code_quality job); inline HTML is
+          # allowed for the badges/images in the README. Headings that repeat
+          # under different parents (e.g. "Database Configuration") are fine.
+          cat > "$RUNNER_TEMP/markdownlint.jsonc" <<'EOF'
+          {
+            "config": {
+              "default": true,
+              "MD013": false,
+              "MD024": { "siblings_only": true },
+              "MD033": {
+                "allowed_elements": ["img", "div", "p", "br", "a", "picture", "source", "details", "summary"]
+              }
+            }
+          }
+          EOF
+          npx --yes markdownlint-cli2@0.24.0 --config "$RUNNER_TEMP/markdownlint.jsonc" "docs/**/*.md" README.md
+
+      - name: Install lychee (link checker)
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/lycheeverse/lychee/releases/download/lychee-v0.24.2/lychee-x86_64-unknown-linux-gnu.tar.gz" \
+            | tar xz -C "$HOME/.local/bin" --strip-components=1 --wildcards '*/lychee'
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Check internal links and anchors
+        run: |
+          lychee --offline --no-progress --include-fragments \
+            'docs/**/*.md' README.md scripts/README.md infrastructure/README.md .github/readme/README.md
+
+      - name: Validate code samples (python, bash, json)
+        run: |
+          python - <<'PY'
+          import ast, json, pathlib, re, subprocess, sys
+
+          FENCE = re.compile(r"^```([A-Za-z0-9_+-]*)[^\n]*\n(.*?)^```", re.S | re.M)
+          failures = checked = 0
+          files = sorted(pathlib.Path("docs").rglob("*.md")) + [pathlib.Path("README.md")]
+          for path in files:
+              text = path.read_text(encoding="utf-8")
+              for m in FENCE.finditer(text):
+                  lang, body = m.group(1).lower(), m.group(2)
+                  line = text.count("\n", 0, m.start()) + 1
+                  err = None
+                  if lang in ("python", "py"):
+                      try:
+                          ast.parse(body)
+                      except SyntaxError as e:
+                          err = f"python: {e.msg} (block line {e.lineno})"
+                  elif lang in ("bash", "sh", "shell"):
+                      r = subprocess.run(["bash", "-n"], input=body, text=True, capture_output=True)
+                      if r.returncode:
+                          err = "bash: " + r.stderr.strip().splitlines()[-1]
+                  elif lang == "json":
+                      try:
+                          json.loads(body)
+                      except ValueError as e:
+                          err = f"json: {e}"
+                  else:
+                      continue
+                  checked += 1
+                  if err:
+                      failures += 1
+                      print(f"::error file={path},line={line}::{err}")
+          print(f"Checked {checked} code blocks, {failures} invalid")
+          sys.exit(1 if failures else 0)
+          PY
+
+      - name: Check docs are consistent with the repository
+        run: |
+          set -euo pipefail
+          status=0
+
+          # Every script in scripts/ must be documented in docs/CLI.md, and vice versa.
+          scripts=$(for f in scripts/*.sh; do basename "$f"; done | sort)
+          documented=$(grep -oE '[A-Za-z0-9_-]+\.sh' docs/CLI.md | sort -u)
+          for s in $(comm -23 <(echo "$scripts") <(echo "$documented")); do
+            echo "::error file=docs/CLI.md::scripts/$s exists but is not documented in docs/CLI.md"; status=1
+          done
+          for s in $(comm -13 <(echo "$scripts") <(echo "$documented")); do
+            echo "::error file=docs/CLI.md::docs/CLI.md documents $s but scripts/$s does not exist"; status=1
+          done
+
+          # Every page in docs/ must be reachable from the docs index.
+          for f in docs/*.md; do
+            name=${f#docs/}
+            [ "$name" = "README.md" ] && continue
+            grep -q "($name" docs/README.md || { echo "::error file=$f::not linked from docs/README.md"; status=1; }
+          done
+          # The index links the examples/ directory; each example must be referenced somewhere in docs/.
+          grep -q "(examples/)" docs/README.md || { echo "::error file=docs/README.md::does not link the examples/ directory"; status=1; }
+          for f in docs/examples/*.md; do
+            grep -rqF "${f#docs/}" docs --include='*.md' --exclude="$(basename "$f")" \
+              || { echo "::error file=$f::not referenced from any other docs page"; status=1; }
+          done
+
+          # Large binaries bloat clones; warn only.
+          while IFS= read -r big; do
+            echo "::warning file=$big::file is larger than 5 MB; consider compressing it (e.g. PNG/WebP instead of BMP)"
+          done < <(find docs -type f -size +5M)
+
+          exit "$status"
+
+      - name: Check external links (advisory)
+        continue-on-error: true
+        run: |
+          lychee --no-progress --max-retries 2 --timeout 20 --accept '200..=299,429' \
+            'docs/**/*.md' README.md
+
+  # ============================================================
+  # Job 8 -- Infrastructure Validation
+  # (Terraform, Kubernetes/Helm, Ansible, Docker)
+  # ============================================================
+  infrastructure_validation:
+    name: Infrastructure Validation
+    runs-on: ubuntu-latest
+    needs: code_quality
+    timeout-minutes: 30
+
+    env:
+      KUBERNETES_VERSION: "1.28.0"
+      KUBECONFORM_VERSION: "0.8.0"
+      HELM_VERSION: "v3.19.0"
+      HADOLINT_VERSION: "2.15.1"
+      ANSIBLE_CONFIG: ${{ github.workspace }}/infrastructure/ansible/ansible.cfg
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: infrastructure/requirements-ci.txt
+
+      - name: Install CI tooling (pinned in infrastructure/requirements-ci.txt)
+        run: python -m pip install -r infrastructure/requirements-ci.txt
+
+      # ---- Terraform ----------------------------------------
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.6"
+          terraform_wrapper: false
+
+      - name: Terraform format check
+        working-directory: infrastructure/terraform
+        run: terraform fmt -check -recursive -diff
+
+      - name: Terraform init (no backend)
+        working-directory: infrastructure/terraform
+        run: terraform init -backend=false -input=false
+
+      - name: Terraform validate
+        working-directory: infrastructure/terraform
+        run: terraform validate
+
+      - name: Check every enable_* toggle is wired up
+        working-directory: infrastructure/terraform
+        run: |
+          set -euo pipefail
+          status=0
+          while read -r v; do
+            if ! grep -qE "var\\.${v}\\b" main.tf; then
+              echo "::error file=infrastructure/terraform/variables.tf::variable ${v} is declared but never used in main.tf"
+              status=1
+            fi
+          done < <(grep -ohE 'variable "enable_[a-z0-9_]+"' variables.tf | cut -d'"' -f2)
+          exit "$status"
+
+      - name: Set up TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.65.0
+
+      - name: TFLint (fails on errors, prints warnings)
+        working-directory: infrastructure/terraform
+        run: tflint --recursive --minimum-failure-severity=error
+
+      # ---- Kubernetes (Helm chart) --------------------------
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Install kubeconform
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar xz -C "$HOME/.local/bin" kubeconform
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Lint Helm chart (all environments)
+        working-directory: infrastructure/kubernetes
+        run: |
+          set -euo pipefail
+          for env in dev staging prod; do
+            helm lint . --strict --values "environments/$env/values.yaml"
+          done
+
+      # Rendered offline, so no cluster is needed (kubectl --dry-run needs an API server).
+      - name: Render and validate Kubernetes manifests (all environments)
+        working-directory: infrastructure/kubernetes
+        run: |
+          set -euo pipefail
+          for env in dev staging prod; do
+            helm template optionix . --values "environments/$env/values.yaml" > "$RUNNER_TEMP/k8s-$env.yaml"
+            kubeconform -kubernetes-version "$KUBERNETES_VERSION" -strict -summary -ignore-missing-schemas \
+              -schema-location default \
+              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+              "$RUNNER_TEMP/k8s-$env.yaml"
+          done
+
+      - name: Check rendered manifests are consistent
+        run: |
+          python - <<'PY'
+          import os, sys, yaml
+
+          cluster_scoped = {"Namespace", "ClusterRole", "ClusterRoleBinding"}
+          problems = []
+          for env in ("dev", "staging", "prod"):
+              with open(os.path.join(os.environ["RUNNER_TEMP"], f"k8s-{env}.yaml")) as f:
+                  docs = [d for d in yaml.safe_load_all(f) if d]
+
+              # Every namespace a resource lives in must be created by the chart.
+              created = {d["metadata"]["name"] for d in docs if d["kind"] == "Namespace"}
+              for d in docs:
+                  ns = d["metadata"].get("namespace")
+                  if d["kind"] not in cluster_scoped and ns not in created:
+                      problems.append(f"{env}: {d['kind']}/{d['metadata']['name']} is in namespace {ns!r}, which the chart does not create ({sorted(created)})")
+
+              # The ConfigMap must be rendered for the environment being validated.
+              config = next(d for d in docs if d["kind"] == "ConfigMap" and d["metadata"]["name"] == "optionix-config")["data"]
+              if config.get("ENVIRONMENT") != env:
+                  problems.append(f"{env}: optionix-config ENVIRONMENT={config.get('ENVIRONMENT')!r}, expected {env!r}")
+
+              # Ingress backends must point at a Service (and port) that exists in the same namespace.
+              services = {(d["metadata"]["namespace"], d["metadata"]["name"]): {p["port"] for p in d["spec"].get("ports", [])}
+                          for d in docs if d["kind"] == "Service"}
+              for d in docs:
+                  if d["kind"] != "Ingress":
+                      continue
+                  ns = d["metadata"]["namespace"]
+                  for rule in d["spec"].get("rules", []):
+                      for route in rule.get("http", {}).get("paths", []):
+                          svc = route["backend"]["service"]
+                          ports = services.get((ns, svc["name"]))
+                          if ports is None:
+                              problems.append(f"{env}: Ingress/{d['metadata']['name']} routes to Service {svc['name']}, which does not exist in {ns}")
+                          elif svc["port"].get("number") not in ports:
+                              problems.append(f"{env}: Ingress/{d['metadata']['name']} routes to {svc['name']}:{svc['port'].get('number')}, Service exposes {sorted(ports)}")
+
+              # Every Service selector must match at least one pod template in its namespace.
+              workloads = [d for d in docs if d["kind"] in {"Deployment", "StatefulSet", "DaemonSet"}]
+              for d in docs:
+                  if d["kind"] != "Service" or not d["spec"].get("selector"):
+                      continue
+                  sel, ns = d["spec"]["selector"], d["metadata"]["namespace"]
+                  if not any(w["metadata"]["namespace"] == ns and sel.items() <= w["spec"]["template"]["metadata"].get("labels", {}).items() for w in workloads):
+                      problems.append(f"{env}: Service/{d['metadata']['name']} selector {sel} matches no pod template in {ns}")
+
+          for p in problems:
+              print(f"::error::{p}")
+          print("Manifests OK" if not problems else f"{len(problems)} problem(s)")
+          sys.exit(1 if problems else 0)
+          PY
+
+      # ---- Ansible ------------------------------------------
+      - name: Install Ansible collections
+        working-directory: infrastructure/ansible
+        run: ansible-galaxy collection install -r requirements.yml
+
+      - name: Ansible syntax check
+        working-directory: infrastructure/ansible
+        run: |
+          set -euo pipefail
+          if [ ! -f inventory/hosts.yml ]; then
+            echo "::notice::inventory/hosts.yml is not tracked; validating with the example inventory"
+            cp inventory/hosts.yml.example inventory/hosts.yml
+          fi
+          ansible-playbook --syntax-check playbooks/main.yml
+
+      - name: Check every play matches at least one host
+        working-directory: infrastructure/ansible
+        run: |
+          set -euo pipefail
+          empty=$(ansible-playbook --list-hosts playbooks/main.yml | awk '/^ *play #/{play=$0} /hosts \(0\)/{print play}')
+          if [ -n "$empty" ]; then
+            while IFS= read -r line; do
+              echo "::error::play matches no hosts: $line"
+            done <<< "$empty"
+            exit 1
+          fi
+
+      - name: ansible-lint (content must load; full style rules are not enforced)
+        working-directory: infrastructure/ansible
+        run: ansible-lint --offline --profile min .
+
+      - name: Check role template and include references resolve
+        working-directory: infrastructure/ansible
+        run: |
+          python - <<'PY'
+          import pathlib, sys, yaml
+
+          def walk(tasks):
+              for task in tasks or []:
+                  yield task
+                  for key in ("block", "rescue", "always"):
+                      yield from walk(task.get(key))
+
+          bad = 0
+          for tasks_file in sorted(pathlib.Path("roles").glob("*/tasks/*.yml")):
+              role = tasks_file.parents[1]
+              for task in walk(yaml.safe_load(tasks_file.read_text())):
+                  for mod in ("template", "ansible.builtin.template"):
+                      if mod in task:
+                          src = task[mod]["src"]
+                          if "{{" not in src and not (role / "templates" / src).exists():
+                              print(f"::error file=infrastructure/ansible/{tasks_file}::template {src} does not exist in {role}/templates")
+                              bad += 1
+                  for mod in ("include_tasks", "import_tasks", "ansible.builtin.include_tasks", "ansible.builtin.import_tasks"):
+                      if mod in task:
+                          ref = task[mod] if isinstance(task[mod], str) else task[mod].get("file")
+                          if ref and "{{" not in ref and not (tasks_file.parent / ref).exists():
+                              print(f"::error file=infrastructure/ansible/{tasks_file}::{mod} {ref} does not exist")
+                              bad += 1
+          print("All references resolve" if not bad else f"{bad} unresolved reference(s)")
+          sys.exit(1 if bad else 0)
+          PY
+
+      # Rendering with Ansible's own engine catches undefined variables and template
+      # syntax errors that a syntax check cannot. The example group_vars supply the values.
+      - name: Render role templates and lint the generated scripts
+        working-directory: infrastructure/ansible
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/rendered"
+          cat > "$RUNNER_TEMP/render.yml" <<'EOF'
+          - hosts: localhost
+            connection: local
+            gather_facts: true
+            vars_files:
+              - "{{ ansible_root }}/group_vars/all.yml.example"
+              - "{{ ansible_root }}/group_vars/vault.yml.example"
+            tasks:
+              - ansible.builtin.template:
+                  src: "{{ item }}"
+                  dest: "{{ out_dir }}/{{ item | basename | regex_replace('[.]j2$', '') }}"
+                  mode: "0644"
+                with_fileglob: "{{ role_dir }}/templates/*.j2"
+          EOF
+          for role in roles/*/; do
+            name=$(basename "$role")
+            mkdir -p "$RUNNER_TEMP/rendered/$name"
+            extra=()
+            [ -f "$role/vars/main.yml" ] && extra=(-e "@$role/vars/main.yml")
+            ansible-playbook -i localhost, "$RUNNER_TEMP/render.yml" \
+              -e "ansible_root=$PWD" -e "role_dir=$PWD/$role" -e "out_dir=$RUNNER_TEMP/rendered/$name" "${extra[@]}"
+          done
+          shellcheck --severity=warning -s bash "$RUNNER_TEMP"/rendered/*/*.sh
+
+      - name: yamllint (Kubernetes values, Ansible, Compose)
+        working-directory: infrastructure
+        # kubernetes/templates is excluded on purpose: Helm templates are not valid YAML until rendered.
+        run: |
+          yamllint -d "{extends: relaxed, rules: {line-length: disable, truthy: disable}}" \
+            kubernetes/Chart.yaml kubernetes/values.yaml kubernetes/environments ansible docker-compose.yml docker-compose.override.yml
+
+      # ---- Docker -------------------------------------------
+      - name: Validate Docker Compose files
+        working-directory: infrastructure
+        run: |
+          set -euo pipefail
+          # The compose files read their secrets from the environment; use the example values.
+          cp .env.example .env
+          docker compose config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.override.yml config --quiet
+
+      - name: Lint Dockerfiles (fails on errors, prints warnings)
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$HOME/.local/bin/hadolint" \
+            "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-linux-x86_64"
+          chmod +x "$HOME/.local/bin/hadolint"
+          hadolint --failure-threshold error \
+            infrastructure/Dockerfile infrastructure/Dockerfile.frontend code/backend/Dockerfile
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # The Backend job builds code/backend/Dockerfile; build the two images that
+      # docker-compose.yml uses (and nothing else builds) here.
+      - name: Build backend Docker image (infrastructure/Dockerfile)
+        uses: docker/build-push-action@v6
+        with:
+          context: code/backend
+          file: infrastructure/Dockerfile
+          push: false
+          tags: optionix/backend-infra:ci-${{ github.sha }}
+          cache-from: type=gha,scope=infra-backend-image
+          cache-to: type=gha,mode=max,scope=infra-backend-image
+
+      - name: Build frontend Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: web-frontend
+          file: infrastructure/Dockerfile.frontend
+          push: false
+          tags: optionix/frontend:ci-${{ github.sha }}
+          cache-from: type=gha,scope=frontend-image
+          cache-to: type=gha,mode=max,scope=frontend-image
+
+      # ---- Secrets ------------------------------------------
+      - name: Scan infrastructure for hard-coded secrets
+        working-directory: infrastructure
+        run: |
+          set -uo pipefail
+          found=0
+          # Template expressions ({{ ... }}) are variable references, not literals.
+          for pattern in 'password\s*=\s*"[^"]{8,}"' 'secret\s*=\s*"[^"]{8,}"' 'api[_-]key\s*=\s*"[^"]{8,}"' 'BEGIN (RSA|EC|OPENSSH) PRIVATE KEY'; do
+            hits=$(grep -rEIin "$pattern" terraform kubernetes ansible \
+              | grep -v '\.example' \
+              | grep -viE 'placeholder|change_?me|\{\{|:[0-9]+:\s*#' || true)
+            if [ -n "$hits" ]; then
+              echo "::error::possible hard-coded secret matching /$pattern/"
+              echo "$hits"
+              found=1
+            fi
+          done
+          exit "$found"
+
+  # ============================================================
+  # Job 9 -- Scripts Validation
+  # ============================================================
+  scripts_validation:
+    name: Scripts Validation
+    runs-on: ubuntu-latest
+    needs: code_quality
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ShellCheck
+        run: python -m pip install shellcheck-py==0.11.0.1
+
+      - name: ShellCheck all tracked shell scripts (fails on warnings and errors)
+        run: git ls-files -z '*.sh' | xargs -0 shellcheck --severity=warning
+
+      - name: ShellCheck stricter style findings (advisory)
+        continue-on-error: true
+        run: git ls-files -z '*.sh' | xargs -0 shellcheck --severity=info
+
+      - name: Check syntax and shebang of all tracked shell scripts
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' f; do
+            bash -n "$f"
+            head -n 1 "$f" | grep -qE '^#!.*(bash|sh)' || { echo "::error file=$f::missing shebang"; exit 1; }
+          done < <(git ls-files -z '*.sh')
+
+      - name: Check shell scripts are executable in git
+        run: |
+          missing=$(git ls-files -s '*.sh' | awk '$1 != "100755" {print $4}')
+          if [ -n "$missing" ]; then
+            while IFS= read -r f; do
+              echo "::error file=$f::not executable in git. Fix: git update-index --chmod=+x $f"
+            done <<< "$missing"
+            exit 1
+          fi
+
+      # Only scripts with a real --help handler are listed: the others
+      # (run_optionix.sh, test_backend.sh, ...) would start services or run
+      # test suites instead of printing usage.
+      - name: Smoke test --help on CLI scripts
+        run: |
+          set -uo pipefail
+          status=0
+          before=$(git status --porcelain)
+          for s in ci_cd_pipeline db_manager doc_generator performance_monitor; do
+            if out=$(timeout 30 bash "scripts/$s.sh" --help </dev/null 2>&1) && grep -qi 'usage' <<< "$out"; then
+              echo "OK   $s.sh --help"
+            else
+              echo "::error file=scripts/$s.sh::--help did not exit 0 with a usage message"
+              status=1
+            fi
+          done
+          after=$(git status --porcelain)
+          if [ "$before" != "$after" ]; then
+            echo "::error::--help modified the working tree:"; git status --porcelain; status=1
+          fi
+          exit "$status"

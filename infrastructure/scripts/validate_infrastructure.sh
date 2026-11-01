@@ -106,7 +106,8 @@ validate_ansible() {
         local role_errors=0
         for role in "$roles_dir"/*; do
             if [ -d "$role" ]; then
-                local role_name=$(basename "$role")
+                local role_name
+                role_name=$(basename "$role")
 
                 # Check required directories
                 for req_dir in tasks handlers templates vars; do
@@ -263,7 +264,8 @@ validate_terraform() {
         local module_errors=0
         for module in "$modules_dir"/*; do
             if [ -d "$module" ]; then
-                local module_name=$(basename "$module")
+                local module_name
+                module_name=$(basename "$module")
 
                 # Check required files
                 for req_file in main.tf variables.tf outputs.tf; do

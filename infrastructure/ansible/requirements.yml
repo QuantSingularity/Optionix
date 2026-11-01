@@ -1,0 +1,9 @@
+---
+collections:
+  - name: community.general
+    version: ">=7.0.0"
+  - name: community.mysql
+    # community.mysql 5.x moves mysql_user/mysql_db to the separate ansible.mysql collection
+    version: ">=3.5.0,<5.0.0"
+  - name: ansible.posix
+    version: ">=1.5.0"

@@ -119,19 +119,19 @@ module "network" {
 module "security" {
   source = "./modules/security"
 
-  environment             = var.environment
-  vpc_id                  = module.network.vpc_id
-  app_name                = var.app_name
-  allowed_cidr_blocks     = var.allowed_cidr_blocks
-  kms_key_id              = aws_kms_key.optionix_key.arn
-  enable_waf              = var.enable_waf
-  waf_rules               = var.waf_rules
-  enable_guardduty        = var.enable_guardduty
-  enable_config           = var.enable_config
-  enable_cloudtrail       = var.enable_cloudtrail
+  environment               = var.environment
+  vpc_id                    = module.network.vpc_id
+  app_name                  = var.app_name
+  allowed_cidr_blocks       = var.allowed_cidr_blocks
+  kms_key_id                = aws_kms_key.optionix_key.arn
+  enable_waf                = var.enable_waf
+  waf_rules                 = var.waf_rules
+  enable_guardduty          = var.enable_guardduty
+  enable_config             = var.enable_config
+  enable_cloudtrail         = var.enable_cloudtrail
   cloudtrail_s3_bucket_name = "${var.app_name}-${var.environment}-cloudtrail-${random_id.bucket_suffix.hex}"
-  db_username             = var.db_username
-  db_password             = local.db_password
+  db_username               = var.db_username
+  db_password               = local.db_password
   tags = {
     Project = "Optionix"
   }

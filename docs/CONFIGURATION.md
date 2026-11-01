@@ -215,8 +215,8 @@ CORS_ALLOW_HEADERS=*
 
 | Option                     | Type    | Default                                        | Description                             | Where to set (env/file) |
 | -------------------------- | ------- | ---------------------------------------------- | --------------------------------------- | ----------------------- |
-| `ETHEREUM_RPC_URL`         | string  | "https://mainnet.infura.io/v3/YOUR_PROJECT_ID" | Ethereum RPC URL                        | env                     |
-| `ETHEREUM_PROVIDER_URL`    | string  | "https://mainnet.infura.io/v3/YOUR_PROJECT_ID" | Ethereum provider URL                   | env                     |
+| `ETHEREUM_RPC_URL`         | string  | `https://mainnet.infura.io/v3/YOUR_PROJECT_ID` | Ethereum RPC URL                        | env                     |
+| `ETHEREUM_PROVIDER_URL`    | string  | `https://mainnet.infura.io/v3/YOUR_PROJECT_ID` | Ethereum provider URL                   | env                     |
 | `ETHEREUM_CHAIN_ID`        | integer | 1                                              | Ethereum chain ID (1=mainnet, 5=goerli) | env                     |
 | `GAS_PRICE_GWEI`           | integer | 20                                             | Gas price in Gwei                       | env                     |
 | `GAS_LIMIT`                | integer | 21000                                          | Gas limit                               | env                     |
@@ -419,7 +419,7 @@ export const API_CONFIG = {
 
 **Connection String Format**:
 
-```
+```text
 postgresql://username:password@host:port/database?options
 ```
 

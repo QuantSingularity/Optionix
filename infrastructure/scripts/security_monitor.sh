@@ -227,7 +227,8 @@ check_compliance() {
     # Check audit log retention
     local audit_log="/var/log/audit/audit.log"
     if [ -f "$audit_log" ]; then
-        local log_age=$(find "$audit_log" -mtime +30 | wc -l)
+        local log_age
+        log_age=$(find "$audit_log" -mtime +30 | wc -l) || true
         if [ "$log_age" -eq 0 ]; then
             send_alert "LOW" "Audit logs may not be properly rotated (no logs older than 30 days)"
         fi
@@ -237,9 +238,12 @@ check_compliance() {
     if command -v openssl >/dev/null 2>&1; then
         local cert_file="/etc/ssl/certs/optionix.crt"
         if [ -f "$cert_file" ]; then
-            local cert_expiry=$(openssl x509 -in "$cert_file" -noout -enddate | cut -d= -f2)
-            local expiry_epoch=$(date -d "$cert_expiry" +%s)
-            local current_epoch=$(date +%s)
+            local cert_expiry
+            cert_expiry=$(openssl x509 -in "$cert_file" -noout -enddate | cut -d= -f2) || true
+            local expiry_epoch
+            expiry_epoch=$(date -d "$cert_expiry" +%s) || true
+            local current_epoch
+            current_epoch=$(date +%s)
             local days_until_expiry=$(( (expiry_epoch - current_epoch) / 86400 ))
 
             if [ "$days_until_expiry" -lt 30 ]; then
@@ -254,8 +258,10 @@ check_compliance() {
         local last_backup
         last_backup=$(grep "Backup completed" "$backup_log" | tail -1 | awk '{print $1, $2}' || true)
         if [ -n "$last_backup" ]; then
-            local backup_epoch=$(date -d "$last_backup" +%s)
-            local current_epoch=$(date +%s)
+            local backup_epoch
+            backup_epoch=$(date -d "$last_backup" +%s) || true
+            local current_epoch
+            current_epoch=$(date +%s)
             local hours_since_backup=$(( (current_epoch - backup_epoch) / 3600 ))
 
             if [ "$hours_since_backup" -gt 48 ]; then
@@ -270,20 +276,24 @@ check_system_resources() {
     log "Checking system resources..."
 
     # Check disk usage
-    local disk_usage=$(df / | awk 'NR==2 {print $5}' | sed 's/%//')
+    local disk_usage
+    disk_usage=$(df / | awk 'NR==2 {print $5}' | sed 's/%//')
     if [ "$disk_usage" -gt 90 ]; then
         send_alert "HIGH" "High disk usage: ${disk_usage}%"
     fi
 
     # Check memory usage
-    local mem_usage=$(free | awk 'NR==2{printf "%.2f", $3*100/$2}')
+    local mem_usage
+    mem_usage=$(free | awk 'NR==2{printf "%.2f", $3*100/$2}')
     if (( $(echo "$mem_usage > 90" | bc -l) )); then
         send_alert "HIGH" "High memory usage: ${mem_usage}%"
     fi
 
     # Check CPU load
-    local cpu_load=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//')
-    local cpu_cores=$(nproc)
+    local cpu_load
+    cpu_load=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//')
+    local cpu_cores
+    cpu_cores=$(nproc)
     if (( $(echo "$cpu_load > $cpu_cores * 2" | bc -l) )); then
         send_alert "MEDIUM" "High CPU load: $cpu_load (cores: $cpu_cores)"
     fi
@@ -293,7 +303,8 @@ check_system_resources() {
 generate_compliance_report() {
     log "Generating compliance report..."
 
-    local report_file="/var/log/optionix/compliance_report_$(date +%Y%m%d).txt"
+    local report_file
+    report_file="/var/log/optionix/compliance_report_$(date +%Y%m%d).txt"
 
     {
         echo "Optionix Security and Compliance Report"

@@ -26,8 +26,8 @@ Get started with Optionix in 3 simple steps:
 
 ### Advanced Topics
 
-- [Architecture](ARCHITECTURE.md) - System design and component interactions
-- [Examples](EXAMPLES/) - Runnable code examples and tutorials
+- [Architecture](architecture.md) - System design and component interactions
+- [Examples](examples/) - Runnable code examples and tutorials
 - [Troubleshooting](TROUBLESHOOTING.md) - Common issues and solutions
 
 ### Contributing
@@ -48,7 +48,7 @@ Get started with Optionix in 3 simple steps:
 
 ## Platform Components
 
-```
+```text
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │   Web/Mobile    │────▶│   Backend API   │────▶│   AI Models     │
 │    Frontend     │◀────│    (FastAPI)    │◀────│   (PyTorch)     │
@@ -72,4 +72,4 @@ Get started with Optionix in 3 simple steps:
 ---
 
 For detailed installation instructions, see [INSTALLATION.md](INSTALLATION.md).  
-For usage examples, see [USAGE.md](USAGE.md) and [EXAMPLES/](EXAMPLES/).
+For usage examples, see [USAGE.md](USAGE.md) and [examples/](examples/).

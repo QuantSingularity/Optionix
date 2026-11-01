@@ -50,7 +50,7 @@ chmod +x scripts/setup_optionix_env.sh
 
 **Example Output**:
 
-```
+```text
 Starting Optionix project setup...
 ✓ All required tools found.
 Setting up Optionix Backend...
@@ -187,10 +187,10 @@ alembic history
 alembic current
 
 # Upgrade to specific revision
-alembic upgrade <revision_id>
+alembic upgrade REVISION_ID  # revision IDs: alembic history
 
 # Downgrade to specific revision
-alembic downgrade <revision_id>
+alembic downgrade REVISION_ID  # revision IDs: alembic history
 ```
 
 ## Testing Scripts
@@ -218,7 +218,7 @@ Run all tests across the project.
 
 **Example Output**:
 
-```
+```text
 Running Optionix Comprehensive Tests...
 ========================================
 Backend Tests:
@@ -235,6 +235,25 @@ Frontend: 89/89 tests passed (100%)
 
 Overall: 243/243 tests passed ✓
 ```
+
+### test_backend.sh
+
+Start the backend and smoke-test its API endpoints.
+
+**Location**: `scripts/test_backend.sh`
+
+**Usage**:
+
+```bash
+./scripts/test_backend.sh
+```
+
+The script takes no options. It requires the virtual environment created by `setup_optionix_env.sh`, then:
+
+1. Starts the backend with `uvicorn` on port 8000
+2. Waits up to 30 seconds for the server to become ready
+3. Checks `GET /` and `POST /market/volatility`
+4. Stops the server and exits non-zero if any check failed
 
 ### Backend Testing
 
@@ -318,7 +337,7 @@ Run all linters and code quality checks.
 
 **Example Output**:
 
-```
+```text
 Running Code Quality Checks...
 ==============================
 ✓ flake8: No issues found
@@ -487,7 +506,7 @@ Monitor system performance and health.
 
 **Example Output**:
 
-```
+```text
 Optionix Performance Monitor
 ============================
 Timestamp: 2025-01-01 12:00:00
@@ -533,7 +552,7 @@ Validate environment configuration.
 
 **Example Output**:
 
-```
+```text
 Validating Optionix Environment...
 ===================================
 ✓ Python 3.11 found
@@ -661,6 +680,7 @@ ansible-playbook -i inventory/production.ini playbooks/deploy.yml --tags "backen
 | `run_optionix.sh`        | `[--backend-only\|--frontend-only\|--production]` | Start platform       | `./run_optionix.sh --production`        |
 | `db_manager.sh`          | `<init\|migrate\|backup\|restore\|reset>`         | Manage database      | `./db_manager.sh backup`                |
 | `comprehensive_test.sh`  | `[--backend\|--frontend\|--coverage]`             | Run tests            | `./comprehensive_test.sh --coverage`    |
+| `test_backend.sh`        | None                                              | Smoke-test API       | `./test_backend.sh`                     |
 | `lint-all.sh`            | `[--fix\|--backend\|--frontend]`                  | Code quality         | `./lint-all.sh --fix`                   |
 | `build_production.sh`    | `[--tag TAG\|--push]`                             | Build artifacts      | `./build_production.sh --tag v2.0`      |
 | `performance_monitor.sh` | `[--interval N\|--duration N]`                    | Monitor system       | `./performance_monitor.sh --interval 5` |
@@ -694,6 +714,7 @@ ansible-playbook -i inventory/production.ini playbooks/deploy.yml --tags "backen
    ```
 
 5. **Monitor logs during deployment**:
+
    ```bash
    docker-compose logs -f
    ```
@@ -706,4 +727,4 @@ See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common CLI issues and solutions
 
 - [API Reference](API.md) - REST API documentation
 - [Configuration](CONFIGURATION.md) - Environment configuration
-- [Examples](EXAMPLES/) - Practical examples
+- [Examples](examples/) - Practical examples

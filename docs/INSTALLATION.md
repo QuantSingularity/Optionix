@@ -81,9 +81,9 @@ chmod +x scripts/run_optionix.sh
 
 The platform will be available at:
 
-- **Web Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
+- **Web Frontend**: <http://localhost:3000>
+- **Backend API**: <http://localhost:8000>
+- **API Docs**: <http://localhost:8000/docs>
 
 ## Manual Installation
 
@@ -115,7 +115,7 @@ alembic upgrade head
 python run_backend.py
 ```
 
-The backend API will be available at http://localhost:8000.
+The backend API will be available at <http://localhost:8000>.
 
 ### Frontend Installation
 
@@ -134,7 +134,7 @@ nano .env.local  # Set REACT_APP_API_URL=http://localhost:8000
 npm start
 ```
 
-The web frontend will be available at http://localhost:3000.
+The web frontend will be available at <http://localhost:3000>.
 
 ### Mobile Frontend Installation
 

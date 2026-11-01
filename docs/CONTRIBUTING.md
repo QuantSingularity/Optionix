@@ -44,6 +44,7 @@ We pledge to make participation in our project a harassment-free experience for 
    ```
 
 3. **Create a Branch**
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
@@ -393,7 +394,7 @@ function calculateGreeks(spotPrice: number, strikePrice: number): Greeks {
 When adding new features:
 
 1. Update relevant `.md` files in `docs/`
-2. Add examples to `docs/EXAMPLES/`
+2. Add examples to `docs/examples/`
 3. Update API reference if applicable
 4. Add to `docs/FEATURE_MATRIX.md`
 
@@ -403,7 +404,7 @@ When adding new features:
 
 **DO NOT** open public issues for security vulnerabilities.
 
-Email security concerns to: security@optionix.com
+Email security concerns to: `security@optionix.com`
 
 Include:
 
@@ -438,7 +439,7 @@ Include:
 
 ### Format
 
-```
+```text
 type(scope): subject
 
 body
@@ -458,7 +459,7 @@ footer
 
 ### Example
 
-```
+```text
 feat(pricing): add barrier option pricing
 
 Implement up-and-out and down-and-out barrier options
@@ -469,7 +470,7 @@ Closes #123
 
 ## Branch Naming
 
-```
+```text
 <type>/<short-description>
 
 Examples:

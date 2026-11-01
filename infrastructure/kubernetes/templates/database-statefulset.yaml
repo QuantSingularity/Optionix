@@ -64,7 +64,6 @@ spec:
               mountPath: /mnt/config-map
             - name: ssl-certs
               mountPath: /mnt/ssl-certs
-              optional: true
             - name: ssl
               mountPath: /mnt/ssl
       containers:

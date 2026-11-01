@@ -26,7 +26,7 @@ Optionix is built using a modern microservices architecture with the following d
 
 ### High-Level Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────┐
 │                          Client Layer                                │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
@@ -137,7 +137,7 @@ graph TB
 
 ### Request Flow
 
-```
+```text
 1. Client Request
    ↓
 2. API Gateway (Rate Limiting, Load Balancing)
@@ -161,7 +161,7 @@ graph TB
 
 ### Options Pricing Flow
 
-```
+```text
 User → Frontend → API (/options/price)
          ↓
     Validate Parameters
@@ -185,7 +185,7 @@ Black-Scholes      Monte Carlo
 
 ### AI Prediction Flow
 
-```
+```text
 Market Data → Preprocessing
          ↓
     Feature Engineering
@@ -205,7 +205,7 @@ Market Data → Preprocessing
 
 ### Backend Stack
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │          Application Framework          │
 │  • FastAPI 0.104+                       │
@@ -231,7 +231,7 @@ Market Data → Preprocessing
 
 ### Frontend Stack
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │          Web Framework                  │
 │  • React 18+                            │
@@ -371,7 +371,7 @@ audit_logs
 
 ### Relationships
 
-```
+```text
 users 1──N positions
 users 1──N trades
 positions 1──N trades
@@ -390,7 +390,7 @@ users 1──N audit_logs
 
 ### API Layers
 
-```
+```text
 ┌─────────────────────────────────┐
 │     Route Handlers              │ ← FastAPI endpoints
 ├─────────────────────────────────┤
@@ -406,7 +406,7 @@ users 1──N audit_logs
 
 ### Security Layers
 
-```
+```text
 ┌──────────────────────────────────────────┐
 │  1. Network Security                     │
 │     • HTTPS/TLS                          │
@@ -444,7 +444,7 @@ users 1──N audit_logs
 
 ### Production Deployment
 
-```
+```text
 ┌──────────────────────────────────────────────────┐
 │              Internet                             │
 └────────────────────┬─────────────────────────────┘
@@ -480,7 +480,7 @@ users 1──N audit_logs
 
 ### Container Architecture
 
-```
+```text
 ┌─────────────────────────────────────┐
 │      Docker Container               │
 │  ┌───────────────────────────────┐  │
@@ -513,7 +513,7 @@ users 1──N audit_logs
 
 ### Caching Strategy
 
-```
+```text
 Request → Check Redis Cache
             │
             ├─ Cache Hit → Return Cached Data
@@ -536,7 +536,7 @@ Request → Check Redis Cache
 
 ## Monitoring & Observability
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │           Application                    │
 │  ┌─────────────────────────────────┐    │

@@ -66,7 +66,8 @@ check_prerequisites() {
 backup_database() {
     log "Starting database backup..."
 
-    local timestamp=$(date +%Y%m%d_%H%M%S)
+    local timestamp
+    timestamp=$(date +%Y%m%d_%H%M%S)
     local backup_file="$BACKUP_BASE_DIR/database_${timestamp}.sql"
     local compressed_file="${backup_file}.gz"
     local encrypted_file="${compressed_file}.gpg"
@@ -120,8 +121,10 @@ backup_database() {
 
     # Verify backup integrity
     log "Verifying backup integrity..."
-    local local_checksum=$(sha256sum "$encrypted_file" | awk '{print $1}')
-    local s3_checksum=$(aws s3api head-object --bucket "$S3_BUCKET" --key "database/$(basename "$encrypted_file")" --query 'Metadata.sha256' --output text 2>/dev/null || echo "")
+    local local_checksum
+    local_checksum=$(sha256sum "$encrypted_file" | awk '{print $1}') || true
+    local s3_checksum
+    s3_checksum=$(aws s3api head-object --bucket "$S3_BUCKET" --key "database/$(basename "$encrypted_file")" --query 'Metadata.sha256' --output text 2>/dev/null || echo "")
 
     if [ "$local_checksum" != "$s3_checksum" ]; then
         log "WARNING: Backup checksum verification failed"
@@ -137,7 +140,8 @@ backup_database() {
 backup_application_data() {
     log "Starting application data backup..."
 
-    local timestamp=$(date +%Y%m%d_%H%M%S)
+    local timestamp
+    timestamp=$(date +%Y%m%d_%H%M%S)
     local backup_file="$BACKUP_BASE_DIR/app_data_${timestamp}.tar.gz"
     local encrypted_file="${backup_file}.gpg"
 
@@ -187,7 +191,8 @@ backup_application_data() {
 backup_configuration() {
     log "Starting configuration backup..."
 
-    local timestamp=$(date +%Y%m%d_%H%M%S)
+    local timestamp
+    timestamp=$(date +%Y%m%d_%H%M%S)
     local backup_file="$BACKUP_BASE_DIR/config_${timestamp}.tar.gz"
     local encrypted_file="${backup_file}.gpg"
 
@@ -247,7 +252,8 @@ backup_kubernetes() {
         return 0
     fi
 
-    local timestamp=$(date +%Y%m%d_%H%M%S)
+    local timestamp
+    timestamp=$(date +%Y%m%d_%H%M%S)
     local backup_dir="$BACKUP_BASE_DIR/k8s_${timestamp}"
     local backup_file="${backup_dir}.tar.gz"
     local encrypted_file="${backup_file}.gpg"
@@ -313,7 +319,8 @@ cleanup_old_backups() {
     find "$BACKUP_BASE_DIR" -name "*.gpg" -mtime +7 -delete
 
     # S3 cleanup (older than retention period)
-    local cutoff_date=$(date -d "$RETENTION_DAYS days ago" +%Y-%m-%d)
+    local cutoff_date
+    cutoff_date=$(date -d "$RETENTION_DAYS days ago" +%Y-%m-%d) || true
 
     for prefix in database application configuration kubernetes; do
         aws s3api list-objects-v2 \
@@ -343,7 +350,8 @@ restore_database() {
 
     # Download from S3 if it's an S3 path
     if [[ "$backup_file" == s3://* ]]; then
-        local local_file="$BACKUP_BASE_DIR/restore_$(basename "$backup_file")"
+        local local_file
+        local_file="$BACKUP_BASE_DIR/restore_$(basename "$backup_file")"
         aws s3 cp "$backup_file" "$local_file" || error_exit "Failed to download backup from S3"
         backup_file="$local_file"
     fi
@@ -391,10 +399,12 @@ test_backup_integrity() {
     log "Testing backup integrity..."
 
     # Test latest database backup
-    local latest_db_backup=$(aws s3 ls "s3://$S3_BUCKET/database/" | sort | tail -1 | awk '{print $4}')
+    local latest_db_backup
+    latest_db_backup=$(aws s3 ls "s3://$S3_BUCKET/database/" | sort | tail -1 | awk '{print $4}') || true
     if [ -n "$latest_db_backup" ]; then
         log "Testing database backup: $latest_db_backup"
-        local test_file="$BACKUP_BASE_DIR/test_$(basename "$latest_db_backup")"
+        local test_file
+        test_file="$BACKUP_BASE_DIR/test_$(basename "$latest_db_backup")"
 
         # Download and decrypt
         aws s3 cp "s3://$S3_BUCKET/database/$latest_db_backup" "$test_file"
@@ -416,7 +426,8 @@ test_backup_integrity() {
 generate_backup_report() {
     log "Generating backup report..."
 
-    local report_file="/var/log/optionix/backup_report_$(date +%Y%m%d).txt"
+    local report_file
+    report_file="/var/log/optionix/backup_report_$(date +%Y%m%d).txt"
 
     {
         echo "Optionix Backup Report"

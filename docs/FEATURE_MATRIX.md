@@ -29,40 +29,40 @@ Comprehensive feature overview for the Optionix platform with version support an
 
 | Feature                |              Short description | Module / File                                         | CLI flag / API                         | Example (path)                                                     | Notes                          |
 | ---------------------- | -----------------------------: | ----------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------ | ------------------------------ |
-| Black-Scholes Model    |       European options pricing | `code/quantitative/black_scholes.py`                  | `POST /options/price`                  | [EXAMPLES/example_pricing.md](EXAMPLES/example_pricing.md)         | Delta, Gamma, Theta, Vega, Rho |
+| Black-Scholes Model    |       European options pricing | `code/quantitative/black_scholes.py`                  | `POST /options/price`                  | [examples/example_pricing.md](examples/example_pricing.md)         | Delta, Gamma, Theta, Vega, Rho |
 | American Options       | American-style options pricing | `code/quantitative/black_scholes.py`                  | `POST /options/price` (style=american) | [API.md](API.md#calculate-option-price)                            | Binomial tree method           |
-| Monte Carlo Simulation | Path-dependent options pricing | `code/quantitative/monte_carlo.py`                    | `POST /options/monte-carlo`            | [EXAMPLES/example_monte_carlo.md](EXAMPLES/example_monte_carlo.md) | Asian, Barrier, Lookback       |
+| Monte Carlo Simulation | Path-dependent options pricing | `code/quantitative/monte_carlo.py`                    | `POST /options/monte-carlo`            | [examples/example_monte_carlo.md](examples/example_monte_carlo.md) | Asian, Barrier, Lookback       |
 | Implied Volatility     | Calculate IV from market price | `code/backend/services/pricing_engine.py`             | `POST /options/implied-volatility`     | [API.md](API.md#calculate-implied-volatility)                      | Newton-Raphson method          |
 | Greeks Calculation     |           Option sensitivities | `code/quantitative/black_scholes.py`                  | Included in price response             | [USAGE.md](USAGE.md#options-pricing)                               | All first-order and Gamma      |
-| Volatility Surface     |    3D volatility visualization | `code/quantitative/advanced/volatility_surface.py`    | `GET /market/volatility-surface`       | [EXAMPLES/example_volatility.md](EXAMPLES/example_volatility.md)   | Strike and maturity dimensions |
+| Volatility Surface     |    3D volatility visualization | `code/quantitative/advanced/volatility_surface.py`    | `GET /market/volatility-surface`       | Not yet documented                                                 | Strike and maturity dimensions |
 | Local Volatility       |  Dupire local volatility model | `code/quantitative/advanced/local_volatility.py`      | Python API only                        | [USAGE.md](USAGE.md#python-library-usage)                          | Advanced pricing               |
 | Stochastic Volatility  |    Heston model implementation | `code/quantitative/advanced/stochastic_volatility.py` | Python API only                        | [USAGE.md](USAGE.md#python-library-usage)                          | Mean-reverting volatility      |
 | Calibration Engine     |    Model parameter calibration | `code/quantitative/advanced/calibration_engine.py`    | Python API only                        | [USAGE.md](USAGE.md#python-library-usage)                          | Fit to market data             |
 
 ## AI/ML Features
 
-| Feature               |                 Short description | Module / File                                               | CLI flag / API                     | Example (path)                                                         | Notes                    |
-| --------------------- | --------------------------------: | ----------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------- | ------------------------ |
-| Volatility Prediction | AI-powered volatility forecasting | `code/backend/services/model_service.py`                    | `POST /market/volatility`          | [EXAMPLES/example_ai_prediction.md](EXAMPLES/example_ai_prediction.md) | PyTorch LSTM model       |
-| Model Training        |           Train ML models on data | `code/ai_models/training_scripts/train_volatility_model.py` | `python train_volatility_model.py` | [CLI.md](CLI.md#ai-model-training)                                     | Historical data required |
-| Feature Engineering   |       Data preprocessing pipeline | `code/ai_models/training_scripts/data_preprocessing.py`     | Python API only                    | [USAGE.md](USAGE.md#python-library-usage)                              | Normalization, scaling   |
-| Model Versioning      |              Track model versions | `code/ai_models/volatility_model_metadata.json`             | `MODEL_VERSION` env var            | [CONFIGURATION.md](CONFIGURATION.md#aiml-model-configuration)          | Semantic versioning      |
-| Mispricing Detection  |  Identify arbitrage opportunities | `code/backend/services/model_service.py`                    | Future feature                     | TBD                                                                    | Planned v2.1             |
-| Market Sentiment      |          Analyze market sentiment | Future feature                                              | Future feature                     | TBD                                                                    | Planned v2.2             |
-| Automated Signals     |          Generate trading signals | Future feature                                              | Future feature                     | TBD                                                                    | Planned v2.1             |
+| Feature               |                 Short description | Module / File                                               | CLI flag / API                     | Example (path)                                                | Notes                    |
+| --------------------- | --------------------------------: | ----------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------- | ------------------------ |
+| Volatility Prediction | AI-powered volatility forecasting | `code/backend/services/model_service.py`                    | `POST /market/volatility`          | [USAGE.md](USAGE.md#volatility-prediction)                    | PyTorch LSTM model       |
+| Model Training        |           Train ML models on data | `code/ai_models/training_scripts/train_volatility_model.py` | `python train_volatility_model.py` | [ai_models/README.md](../code/ai_models/README.md)            | Historical data required |
+| Feature Engineering   |       Data preprocessing pipeline | `code/ai_models/training_scripts/data_preprocessing.py`     | Python API only                    | [USAGE.md](USAGE.md#python-library-usage)                     | Normalization, scaling   |
+| Model Versioning      |              Track model versions | `code/ai_models/volatility_model_metadata.json`             | `MODEL_VERSION` env var            | [CONFIGURATION.md](CONFIGURATION.md#aiml-model-configuration) | Semantic versioning      |
+| Mispricing Detection  |  Identify arbitrage opportunities | `code/backend/services/model_service.py`                    | Future feature                     | TBD                                                           | Planned v2.1             |
+| Market Sentiment      |          Analyze market sentiment | Future feature                                              | Future feature                     | TBD                                                           | Planned v2.2             |
+| Automated Signals     |          Generate trading signals | Future feature                                              | Future feature                     | TBD                                                           | Planned v2.1             |
 
 ## Blockchain Features
 
 | Feature               |            Short description | Module / File                                   | CLI flag / API                       | Example (path)                                                   | Notes                    |
 | --------------------- | ---------------------------: | ----------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------- | ------------------------ |
-| Smart Contracts       |    Solidity option contracts | `code/blockchain/contracts/OptionsContract.sol` | Truffle deploy                       | [USAGE.md](USAGE.md#blockchain-setup)                            | ERC-20 compatible        |
-| Options Contract      | Create decentralized options | `code/backend/services/blockchain_service.py`   | `POST /blockchain/contract/create`   | [EXAMPLES/example_blockchain.md](EXAMPLES/example_blockchain.md) | Call and Put options     |
-| Futures Contract      |        Decentralized futures | `code/blockchain/contracts/FuturesContract.sol` | Truffle deploy                       | [USAGE.md](USAGE.md#blockchain-setup)                            | Perpetual and fixed-term |
+| Smart Contracts       |    Solidity option contracts | `code/blockchain/contracts/OptionsContract.sol` | Truffle deploy                       | [USAGE.md](USAGE.md#using-the-blockchain-service)                | ERC-20 compatible        |
+| Options Contract      | Create decentralized options | `code/backend/services/blockchain_service.py`   | `POST /blockchain/contract/create`   | [examples/example_blockchain.md](examples/example_blockchain.md) | Call and Put options     |
+| Futures Contract      |        Decentralized futures | `code/blockchain/contracts/FuturesContract.sol` | Truffle deploy                       | [USAGE.md](USAGE.md#using-the-blockchain-service)                | Perpetual and fixed-term |
 | Exercise Option       |    Exercise on-chain options | `code/backend/services/blockchain_service.py`   | `POST /blockchain/contract/exercise` | [API.md](API.md#exercise-option)                                 | Automatic settlement     |
-| Collateral Management |     Manage option collateral | `code/blockchain/contracts/OptionsContract.sol` | Smart contract function              | [EXAMPLES/example_blockchain.md](EXAMPLES/example_blockchain.md) | Margin requirements      |
-| Oracle Integration    |        Chainlink price feeds | `code/blockchain/contracts/OptionsContract.sol` | Smart contract                       | [USAGE.md](USAGE.md#blockchain-setup)                            | Real-time price data     |
+| Collateral Management |     Manage option collateral | `code/blockchain/contracts/OptionsContract.sol` | Smart contract function              | [examples/example_blockchain.md](examples/example_blockchain.md) | Margin requirements      |
+| Oracle Integration    |        Chainlink price feeds | `code/blockchain/contracts/OptionsContract.sol` | Smart contract                       | [USAGE.md](USAGE.md#using-the-blockchain-service)                | Real-time price data     |
 | Circuit Breaker       |       Emergency trading halt | `code/blockchain/contracts/OptionsContract.sol` | Admin function                       | [API.md](API.md#blockchain-integration)                          | Risk mitigation          |
-| Audit Trail           |    Immutable transaction log | `code/blockchain/`                              | On-chain events                      | [USAGE.md](USAGE.md#blockchain-setup)                            | Full transparency        |
+| Audit Trail           |    Immutable transaction log | `code/blockchain/`                              | On-chain events                      | [USAGE.md](USAGE.md#using-the-blockchain-service)                | Full transparency        |
 | Multi-signature       |     Multi-sig admin controls | `code/blockchain/contracts/OptionsContract.sol` | Smart contract                       | Future feature                                                   | Planned v2.1             |
 
 ## Security Features
@@ -199,4 +199,4 @@ For detailed documentation on each feature, see:
 
 - [API Reference](API.md) - API endpoints and parameters
 - [Usage Guide](USAGE.md) - Practical usage examples
-- [Examples](EXAMPLES/) - Runnable code examples
+- [Examples](examples/) - Runnable code examples

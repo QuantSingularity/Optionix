@@ -562,5 +562,5 @@ print(f"1-day VaR (95%): ${var_95:.2f}")
 ## Need Help?
 
 - Check [Troubleshooting Guide](TROUBLESHOOTING.md)
-- Review [Architecture Documentation](ARCHITECTURE.md)
+- Review [Architecture Documentation](architecture.md)
 - Open an issue on [GitHub](https://github.com/quantsingularity/Optionix/issues)
