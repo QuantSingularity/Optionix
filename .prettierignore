@@ -1,0 +1,3 @@
+# Helm templates contain Go-template syntax ({{ ... }}), which is not valid YAML.
+# Prettier "formats" an unquoted {{ x }} into "{ { x } }", which breaks the chart.
+infrastructure/kubernetes/templates/
