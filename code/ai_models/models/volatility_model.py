@@ -11,6 +11,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.preprocessing import RobustScaler
 
 from ..config import RANDOM_STATE
+from ..determinism import single_threaded
 from .schemas import (
     ModelMetadata,
     ModelPrediction,
@@ -99,6 +100,7 @@ class VolatilityModel:
             random_state=RANDOM_STATE,
         )
         model.fit(scaler.transform(X.iloc[:split][selected]), y.iloc[:split])
+        single_threaded(model)  # reproducible metrics
         predicted = model.predict(scaler.transform(X.iloc[split:][selected]))
         metrics = {
             "test_mse": float(mean_squared_error(y.iloc[split:], predicted)),
@@ -114,6 +116,7 @@ class VolatilityModel:
             random_state=RANDOM_STATE,
         )
         final_model.fit(final_scaler.transform(X[selected]), y)
+        single_threaded(final_model)
         self.feature_selector = selector
         self.scaler = final_scaler
         self.model = final_model
@@ -223,7 +226,7 @@ class VolatilityModel:
         payload = joblib.load(path)
         self.model_id = payload["model_id"]
         self.horizon = payload["horizon"]
-        self.model = payload["model"]
+        self.model = single_threaded(payload["model"])
         self.scaler = payload["scaler"]
         self.feature_selector = payload["selector"]
         self.feature_columns = payload["columns"]

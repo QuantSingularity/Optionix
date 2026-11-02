@@ -306,8 +306,6 @@ resource "aws_config_configuration_recorder" "optionix_config" {
     all_supported                 = true
     include_global_resource_types = true
   }
-
-  depends_on = [aws_config_delivery_channel.optionix_config]
 }
 
 resource "aws_config_delivery_channel" "optionix_config" {
@@ -321,7 +319,7 @@ resource "aws_config_delivery_channel" "optionix_config" {
     delivery_frequency = "TwentyFour_Hours"
   }
 
-  depends_on = [aws_config_configuration_recorder_status.optionix_config]
+  depends_on = [aws_config_configuration_recorder.optionix_config]
 }
 
 resource "aws_config_configuration_recorder_status" "optionix_config" {

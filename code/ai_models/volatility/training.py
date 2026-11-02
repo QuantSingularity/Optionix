@@ -7,6 +7,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import RobustScaler
 
 from ..config import RANDOM_STATE
+from ..determinism import single_threaded
 
 
 def make_pipeline(random_state: int = RANDOM_STATE) -> Pipeline:
@@ -39,7 +40,8 @@ def train_pipeline(
     if split < 50 or len(features) - split < 10:
         raise ValueError("Not enough samples to train and validate")
     pipeline = make_pipeline(random_state)
-    pipeline.fit(features[:split], target[:split])
+    pipeline.fit(features[:split], target[:split])  # fitting stays parallel
+    single_threaded(pipeline)  # so the reported metrics are reproducible
     predictions = pipeline.predict(features[split:])
     baseline = np.full_like(predictions, np.mean(target[:split]))
     metrics = {
@@ -49,5 +51,6 @@ def train_pipeline(
         "train_samples": int(split),
         "test_samples": int(len(features) - split),
     }
-    pipeline.fit(features, target)
-    return pipeline, metrics
+    final = make_pipeline(random_state)
+    final.fit(features, target)
+    return single_threaded(final), metrics

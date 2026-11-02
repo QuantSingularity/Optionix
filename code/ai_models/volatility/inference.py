@@ -8,6 +8,7 @@ import joblib
 import numpy as np
 
 from ..config import METADATA_FILENAME, MODEL_FILENAME
+from ..determinism import single_threaded
 from .artifacts import sha256_file
 from .features import (
     FEATURE_NAMES,
@@ -67,7 +68,7 @@ class VolatilityPredictor:
                     self.load_error = "model feature contract mismatch"
                     logger.error("Volatility model features do not match the code")
                     return False
-                self.pipeline = joblib.load(model_path)
+                self.pipeline = single_threaded(joblib.load(model_path))
                 self.metadata = metadata
                 self.model_hash = actual
                 return True

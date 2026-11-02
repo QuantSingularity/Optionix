@@ -4,6 +4,7 @@ import shutil
 import numpy as np
 import pytest
 from ai_models.training.synthetic import synthetic_ohlc
+from ai_models.volatility.artifacts import save_artifacts
 from ai_models.volatility.dataset import build_dataset
 from ai_models.volatility.features import (
     FEATURE_NAMES,
@@ -13,6 +14,7 @@ from ai_models.volatility.features import (
     validate_bar,
 )
 from ai_models.volatility.inference import VolatilityPredictor
+from ai_models.volatility.training import train_pipeline
 
 BAR = {"open": 100.0, "high": 103.0, "low": 98.0, "close": 101.0, "volume": 5.0}
 
@@ -63,6 +65,27 @@ def test_trained_artifact_beats_baseline_and_is_deterministic(artifact_dir):
     assert meta["features"] == list(FEATURE_NAMES)
     p = VolatilityPredictor(artifact_dir)
     assert p.predict(BAR, "1d")["volatility"] == p.predict(BAR, "1d")["volatility"]
+
+
+def test_inference_is_single_threaded_and_bit_reproducible(artifact_dir):
+    # RandomForest predict() with n_jobs != 1 sums the trees from several threads, so the
+    # last bits depended on thread timing (and on the number of cores of the machine).
+    p = VolatilityPredictor(artifact_dir)
+    assert p.pipeline.get_params()["model__n_jobs"] == 1
+    assert len({p.predict(BAR, "1d")["volatility"] for _ in range(300)}) == 1
+
+
+def test_loading_an_artifact_saved_with_threads_forces_single_thread(tmp_path):
+    frame = synthetic_ohlc(600, seed=3)
+    X, y = build_dataset(frame, horizon=5)
+    pipeline, metrics = train_pipeline(X, y)
+    assert pipeline.get_params()["model__n_jobs"] == 1
+    pipeline.set_params(model__n_jobs=4)  # an artifact trained before this was enforced
+    save_artifacts(str(tmp_path), pipeline, metrics, "artifact saved with threads on")
+    p = VolatilityPredictor(str(tmp_path))
+    assert p.available
+    assert p.pipeline.get_params()["model__n_jobs"] == 1
+    assert len({p.predict(BAR, "1d")["volatility"] for _ in range(300)}) == 1
 
 
 def test_predictor_behaviour(artifact_dir, tmp_path):

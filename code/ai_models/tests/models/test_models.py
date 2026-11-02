@@ -1,3 +1,4 @@
+import joblib
 import numpy as np
 import pandas as pd
 import pytest
@@ -27,6 +28,25 @@ def test_model_service_end_to_end(tmp_path):
     assert reloaded.predict(frame).prediction == pytest.approx(prediction.prediction)
     with pytest.raises(ValueError):
         reloaded.load(path, expected_sha256="0" * 64)
+
+
+def test_volatility_model_predicts_single_threaded(tmp_path):
+    service = ModelService()
+    frame = synthetic_ohlc(1500, seed=2)
+    frame.index = pd.date_range("2021-01-01", periods=len(frame), freq="D", tz="UTC")
+    service.register_model("vol", ModelType.VOLATILITY_PREDICTION)
+    service.train_model("vol", frame)
+    model = service.models["vol"]
+    assert model.model.n_jobs == 1
+    path = str(tmp_path / "model.pkl")
+    model.save(path)
+    payload = joblib.load(path)
+    payload["model"].set_params(n_jobs=4)  # a model pickled before this was enforced
+    joblib.dump(payload, path)
+    reloaded = VolatilityModel()
+    reloaded.load(path)
+    assert reloaded.model.n_jobs == 1
+    assert len({reloaded.predict(frame).prediction for _ in range(200)}) == 1
 
 
 def test_fraud_model():
