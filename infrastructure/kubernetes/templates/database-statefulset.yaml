@@ -9,7 +9,7 @@ metadata:
     component: primary
 spec:
   serviceName: "{{ .Values.appName }}-database"
-  replicas: { { .Values.database.replicas } }
+  replicas: {{ .Values.database.replicas }}
   selector:
     matchLabels:
       app: "{{ .Values.appName }}-database"
